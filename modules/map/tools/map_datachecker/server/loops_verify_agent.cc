@@ -105,7 +105,7 @@ void LoopsVerifyAgent::CheckVerify(LoopsVerifyRequest *request,
     LoopResult *loop_result = response->mutable_loop_result();
 
     loop_result->set_loop_num(static_cast<double>(lap));
-    bool is_reached = lap >= GetLoopsToCheck(request) ? true : false;
+    bool is_reached = lap >= GetLoopsToCheck(request);
     loop_result->set_is_reached(is_reached);
 
     DataType data_type = request->type();
@@ -139,7 +139,7 @@ void LoopsVerifyAgent::StopVerify(LoopsVerifyRequest *request,
     AINFO << "acquired lap: " << lap << ", conf: " << conf;
     LoopResult *loop_result = response->mutable_loop_result();
     loop_result->set_loop_num(static_cast<double>(lap));
-    bool is_reached = lap >= GetLoopsToCheck(request) ? true : false;
+    bool is_reached = lap >= GetLoopsToCheck(request);
     loop_result->set_is_reached(is_reached);
 
     DataType data_type = request->type();
@@ -249,8 +249,7 @@ int LoopsVerifyAgent::GetPosesToCheck(
 
   std::vector<bool> range_index;
   double min_time = GetRangeIndex(sp_range, &range_index, sp_vec_poses);
-  if (min_time == std::numeric_limits<double>::max() ||
-      range_index.size() == 0) {
+  if (min_time == std::numeric_limits<double>::max() || range_index.empty()) {
     AINFO << "min_time: " << min_time
           << ", range_index size: " << range_index.size();
     return -1;

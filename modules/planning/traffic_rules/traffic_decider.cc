@@ -33,6 +33,7 @@
 #include "modules/planning/traffic_rules/rerouting.h"
 #include "modules/planning/traffic_rules/stop_sign.h"
 #include "modules/planning/traffic_rules/traffic_light.h"
+#include "modules/planning/traffic_rules/yield_sign.h"
 
 namespace apollo {
 namespace planning {
@@ -75,6 +76,10 @@ void TrafficDecider::RegisterRules() {
   s_rule_factory.Register(TrafficRuleConfig::STOP_SIGN,
                           [](const TrafficRuleConfig &config) -> TrafficRule * {
                             return new StopSign(config);
+                          });
+  s_rule_factory.Register(TrafficRuleConfig::YIELD_SIGN,
+                          [](const TrafficRuleConfig &config) -> TrafficRule * {
+                            return new YieldSign(config);
                           });
   s_rule_factory.Register(TrafficRuleConfig::TRAFFIC_LIGHT,
                           [](const TrafficRuleConfig &config) -> TrafficRule * {
@@ -127,7 +132,7 @@ void TrafficDecider::BuildPlanningTarget(
         vehicle_config.vehicle_param().front_edge_to_center();
     stop_point.set_s(min_s - front_edge_to_center +
                      FLAGS_virtual_stop_wall_length / 2.0);
-    reference_line_info->SetStopPoint(stop_point);
+    reference_line_info->SetLatticeStopPoint(stop_point);
   }
 }
 

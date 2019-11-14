@@ -269,7 +269,7 @@ Status LonController::ComputeControlCommand(
   GetPathRemain(debug);
 
   // At near-stop stage, replace the brake control command with the standstill
-  // accleration if the former is even softer than the latter
+  // acceleration if the former is even softer than the latter
   if ((trajectory_message_->trajectory_type() ==
        apollo::planning::ADCTrajectory::NORMAL) &&
       ((std::fabs(debug->preview_acceleration_reference()) <=
@@ -475,31 +475,38 @@ void LonController::SetDigitalFilter(double ts, double cutoff_freq,
 // TODO(all): Refactor and simplify
 void LonController::GetPathRemain(SimpleLongitudinalDebug *debug) {
   int stop_index = 0;
+  static constexpr double kSpeedThreshold = 1e-3;
+  static constexpr double kForwardAccThreshold = -1e-2;
+  static constexpr double kBackwardAccThreshold = 1e-1;
+  static constexpr double kParkingSpeed = 0.1;
 
   if (trajectory_message_->gear() == canbus::Chassis::GEAR_DRIVE) {
     while (stop_index < trajectory_message_->trajectory_point_size()) {
-      if (fabs(trajectory_message_->trajectory_point(stop_index).v()) < 1e-3 &&
-          trajectory_message_->trajectory_point(stop_index).a() > -0.01 &&
-          trajectory_message_->trajectory_point(stop_index).a() < 0.0) {
+      auto &current_trajectory_point =
+          trajectory_message_->trajectory_point(stop_index);
+      if (fabs(current_trajectory_point.v()) < kSpeedThreshold &&
+          current_trajectory_point.a() > kForwardAccThreshold &&
+          current_trajectory_point.a() < 0.0) {
         break;
-      } else {
-        ++stop_index;
       }
+      ++stop_index;
     }
   } else {
     while (stop_index < trajectory_message_->trajectory_point_size()) {
-      if (fabs(trajectory_message_->trajectory_point(stop_index).v()) < 1e-3 &&
-          trajectory_message_->trajectory_point(stop_index).a() < 0.1 &&
-          trajectory_message_->trajectory_point(stop_index).a() > 0.0) {
+      auto &current_trajectory_point =
+          trajectory_message_->trajectory_point(stop_index);
+      if (current_trajectory_point.v() < kSpeedThreshold &&
+          current_trajectory_point.a() < kBackwardAccThreshold &&
+          current_trajectory_point.a() > 0.0) {
         break;
-      } else {
-        ++stop_index;
       }
+      ++stop_index;
     }
   }
   if (stop_index == trajectory_message_->trajectory_point_size()) {
     --stop_index;
-    if (fabs(trajectory_message_->trajectory_point(stop_index).v()) < 0.1) {
+    if (fabs(trajectory_message_->trajectory_point(stop_index).v()) <
+        kParkingSpeed) {
       ADEBUG << "the last point is selected as parking point";
     } else {
       ADEBUG << "the last point found in path and speed > speed_deadzone";

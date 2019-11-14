@@ -39,9 +39,10 @@ void ADCTrajectoryContainer::Insert(
     const ::google::protobuf::Message& message) {
   adc_lane_ids_.clear();
   adc_lane_seq_.clear();
+  adc_target_lane_ids_.clear();
+  adc_target_lane_seq_.clear();
   adc_junction_polygon_ = std::move(Polygon2d());
 
-  std::lock_guard<std::mutex> lock(adc_trajectory_mutex_);
   adc_trajectory_.CopyFrom(dynamic_cast<const ADCTrajectory&>(message));
   ADEBUG << "Received a planning message ["
          << adc_trajectory_.ShortDebugString() << "].";
@@ -58,6 +59,11 @@ void ADCTrajectoryContainer::Insert(
   SetLaneSequence();
   ADEBUG << "Generate an ADC lane id sequence [" << ToString(adc_lane_seq_)
          << "].";
+
+  // Find ADC target lane sequence
+  SetTargetLaneSequence();
+  ADEBUG << "Generate an ADC target lane id sequence ["
+         << ToString(adc_target_lane_seq_) << "].";
 }
 
 bool ADCTrajectoryContainer::IsPointInJunction(const PathPoint& point) const {
@@ -135,7 +141,7 @@ void ADCTrajectoryContainer::SetJunctionPolygon() {
     if (vertices.size() >= 3) {
       adc_junction_info_ptr_ = junction_info;
       s_dist_to_junction_ = s_at_junction - s_start;
-      adc_junction_polygon_ = Polygon2d{vertices};
+      adc_junction_polygon_ = std::move(Polygon2d{vertices});
     }
   }
 }
@@ -177,7 +183,7 @@ void ADCTrajectoryContainer::SetPNCJunctionPolygon() {
     if (vertices.size() >= 3) {
       adc_pnc_junction_info_ptr_ = junction_info;
       s_dist_to_junction_ = s_at_junction - s_start;
-      adc_pnc_junction_polygon_ = Polygon2d{vertices};
+      adc_pnc_junction_polygon_ = std::move(Polygon2d{vertices});
     }
   }
 }
@@ -200,6 +206,11 @@ bool ADCTrajectoryContainer::IsLaneIdInReferenceLine(
   return adc_lane_ids_.find(lane_id) != adc_lane_ids_.end();
 }
 
+bool ADCTrajectoryContainer::IsLaneIdInTargetReferenceLine(
+    const std::string& lane_id) const {
+  return adc_target_lane_ids_.find(lane_id) != adc_target_lane_ids_.end();
+}
+
 void ADCTrajectoryContainer::SetLaneSequence() {
   for (const auto& lane : adc_trajectory_.lane_id()) {
     if (!lane.id().empty()) {
@@ -210,6 +221,20 @@ void ADCTrajectoryContainer::SetLaneSequence() {
   }
   adc_lane_ids_.clear();
   adc_lane_ids_.insert(adc_lane_seq_.begin(), adc_lane_seq_.end());
+}
+
+void ADCTrajectoryContainer::SetTargetLaneSequence() {
+  for (const auto& lane : adc_trajectory_.target_lane_id()) {
+    if (!lane.id().empty()) {
+      if (adc_target_lane_seq_.empty() ||
+          lane.id() != adc_target_lane_seq_.back()) {
+        adc_target_lane_seq_.emplace_back(lane.id());
+      }
+    }
+  }
+  adc_target_lane_ids_.clear();
+  adc_target_lane_ids_.insert(adc_target_lane_seq_.begin(),
+                              adc_target_lane_seq_.end());
 }
 
 std::string ADCTrajectoryContainer::ToString(
@@ -240,7 +265,8 @@ std::string ADCTrajectoryContainer::ToString(
   return str_lane_sequence;
 }
 
-bool ADCTrajectoryContainer::HasOverlap(const LaneSequence& lane_sequence) {
+bool ADCTrajectoryContainer::HasOverlap(
+    const LaneSequence& lane_sequence) const {
   for (const auto& lane_segment : lane_sequence.lane_segment()) {
     std::string lane_id = lane_segment.lane_id();
     if (adc_lane_ids_.find(lane_id) != adc_lane_ids_.end()) {
@@ -265,6 +291,11 @@ void ADCTrajectoryContainer::SetPosition(const Vec2d& position) {
 const std::vector<std::string>& ADCTrajectoryContainer::GetADCLaneIDSequence()
     const {
   return adc_lane_seq_;
+}
+
+const std::vector<std::string>&
+ADCTrajectoryContainer::GetADCTargetLaneIDSequence() const {
+  return adc_target_lane_seq_;
 }
 
 }  // namespace prediction

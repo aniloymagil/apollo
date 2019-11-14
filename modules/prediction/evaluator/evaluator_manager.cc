@@ -29,7 +29,6 @@
 #include "modules/prediction/common/semantic_map.h"
 #include "modules/prediction/container/container_manager.h"
 #include "modules/prediction/container/obstacles/obstacles_container.h"
-#include "modules/prediction/container/pose/pose_container.h"
 #include "modules/prediction/evaluator/cyclist/cyclist_keep_lane_evaluator.h"
 #include "modules/prediction/evaluator/pedestrian/pedestrian_interaction_evaluator.h"
 #include "modules/prediction/evaluator/vehicle/cost_evaluator.h"
@@ -40,6 +39,7 @@
 #include "modules/prediction/evaluator/vehicle/lane_scanning_evaluator.h"
 #include "modules/prediction/evaluator/vehicle/mlp_evaluator.h"
 #include "modules/prediction/evaluator/vehicle/rnn_evaluator.h"
+#include "modules/prediction/evaluator/vehicle/semantic_lstm_evaluator.h"
 
 namespace apollo {
 namespace prediction {
@@ -104,6 +104,7 @@ void EvaluatorManager::RegisterEvaluators() {
   RegisterEvaluator(ObstacleConf::LANE_AGGREGATING_EVALUATOR);
   RegisterEvaluator(ObstacleConf::PEDESTRIAN_INTERACTION_EVALUATOR);
   RegisterEvaluator(ObstacleConf::JUNCTION_MAP_EVALUATOR);
+  RegisterEvaluator(ObstacleConf::SEMANTIC_LSTM_EVALUATOR);
 }
 
 void EvaluatorManager::Init(const PredictionConf& config) {
@@ -124,7 +125,6 @@ void EvaluatorManager::Init(const PredictionConf& config) {
       switch (obstacle_conf.obstacle_type()) {
         case PerceptionObstacle::VEHICLE: {
           if (obstacle_conf.obstacle_status() == ObstacleConf::ON_LANE) {
-            vehicle_on_lane_evaluator_ = obstacle_conf.evaluator_type();
             if (obstacle_conf.priority_type() == ObstaclePriority::CAUTION) {
               vehicle_on_lane_caution_evaluator_ =
                   obstacle_conf.evaluator_type();
@@ -195,16 +195,11 @@ Evaluator* EvaluatorManager::GetEvaluator(
   return it != evaluators_.end() ? it->second.get() : nullptr;
 }
 
-void EvaluatorManager::Run() {
-  auto obstacles_container =
-      ContainerManager::Instance()->GetContainer<ObstaclesContainer>(
-          AdapterConfig::PERCEPTION_OBSTACLES);
-  CHECK_NOTNULL(obstacles_container);
-
+void EvaluatorManager::Run(ObstaclesContainer* obstacles_container) {
   if (FLAGS_enable_semantic_map ||
       FLAGS_prediction_offline_mode == PredictionConstants::kDumpFrameEnv) {
-    BuildObstacleIdHistoryMap();
-    DumpCurrentFrameEnv();
+    BuildObstacleIdHistoryMap(obstacles_container);
+    DumpCurrentFrameEnv(obstacles_container);
     if (FLAGS_prediction_offline_mode == PredictionConstants::kDumpFrameEnv) {
       return;
     }
@@ -222,7 +217,7 @@ void EvaluatorManager::Run() {
         id_obstacle_map.begin(), id_obstacle_map.end(),
         [&](IdObstacleListMap::iterator::value_type& obstacles_iter) {
           for (auto obstacle_ptr : obstacles_iter.second) {
-            EvaluateObstacle(obstacle_ptr, dynamic_env);
+            EvaluateObstacle(obstacle_ptr, obstacles_container, dynamic_env);
           }
         });
   } else {
@@ -237,12 +232,13 @@ void EvaluatorManager::Run() {
         continue;
       }
 
-      EvaluateObstacle(obstacle, dynamic_env);
+      EvaluateObstacle(obstacle, obstacles_container, dynamic_env);
     }
   }
 }
 
 void EvaluatorManager::EvaluateObstacle(Obstacle* obstacle,
+                                        ObstaclesContainer* obstacles_container,
                                         std::vector<Obstacle*> dynamic_env) {
   Evaluator* evaluator = nullptr;
   // Select different evaluators depending on the obstacle's type.
@@ -254,13 +250,13 @@ void EvaluatorManager::EvaluateObstacle(Obstacle* obstacle,
             ObstaclePriority::CAUTION) {
           evaluator = GetEvaluator(vehicle_in_junction_caution_evaluator_);
           CHECK_NOTNULL(evaluator);
-          if (evaluator->Evaluate(obstacle)) {
+          if (evaluator->Evaluate(obstacle, obstacles_container)) {
             break;
           }
         }
         evaluator = GetEvaluator(vehicle_in_junction_evaluator_);
         CHECK_NOTNULL(evaluator);
-        evaluator->Evaluate(obstacle);
+        evaluator->Evaluate(obstacle, obstacles_container);
       } else if (obstacle->IsOnLane()) {
         if (obstacle->latest_feature().priority().priority() ==
             ObstaclePriority::CAUTION) {
@@ -270,9 +266,9 @@ void EvaluatorManager::EvaluateObstacle(Obstacle* obstacle,
         }
         CHECK_NOTNULL(evaluator);
         if (evaluator->GetName() == "LANE_SCANNING_EVALUATOR") {
-          evaluator->Evaluate(obstacle, dynamic_env);
+          evaluator->Evaluate(obstacle, obstacles_container, dynamic_env);
         } else {
-          evaluator->Evaluate(obstacle);
+          evaluator->Evaluate(obstacle, obstacles_container);
         }
       } else {
         ADEBUG << "Obstacle: " << obstacle->id()
@@ -284,7 +280,7 @@ void EvaluatorManager::EvaluateObstacle(Obstacle* obstacle,
       if (obstacle->IsOnLane()) {
         evaluator = GetEvaluator(cyclist_on_lane_evaluator_);
         CHECK_NOTNULL(evaluator);
-        evaluator->Evaluate(obstacle);
+        evaluator->Evaluate(obstacle, obstacles_container);
       }
       break;
     }
@@ -293,7 +289,7 @@ void EvaluatorManager::EvaluateObstacle(Obstacle* obstacle,
           ObstaclePriority::CAUTION) {
         evaluator = GetEvaluator(pedestrian_evaluator_);
         CHECK_NOTNULL(evaluator);
-        evaluator->Evaluate(obstacle);
+        evaluator->Evaluate(obstacle, obstacles_container);
         break;
       }
     }
@@ -301,28 +297,22 @@ void EvaluatorManager::EvaluateObstacle(Obstacle* obstacle,
       if (obstacle->IsOnLane()) {
         evaluator = GetEvaluator(default_on_lane_evaluator_);
         CHECK_NOTNULL(evaluator);
-        evaluator->Evaluate(obstacle);
+        evaluator->Evaluate(obstacle, obstacles_container);
       }
       break;
     }
   }
 }
 
-void EvaluatorManager::EvaluateObstacle(Obstacle* obstacle) {
+void EvaluatorManager::EvaluateObstacle(
+    Obstacle* obstacle, ObstaclesContainer* obstacles_container) {
   std::vector<Obstacle*> dummy_dynamic_env;
-  EvaluateObstacle(obstacle, dummy_dynamic_env);
+  EvaluateObstacle(obstacle, obstacles_container, dummy_dynamic_env);
 }
 
-void EvaluatorManager::BuildObstacleIdHistoryMap() {
+void EvaluatorManager::BuildObstacleIdHistoryMap(
+    ObstaclesContainer* obstacles_container) {
   obstacle_id_history_map_.clear();
-  auto obstacles_container =
-      ContainerManager::Instance()->GetContainer<ObstaclesContainer>(
-          AdapterConfig::PERCEPTION_OBSTACLES);
-  CHECK_NOTNULL(obstacles_container);
-  auto ego_pose_container =
-      ContainerManager::Instance()->GetContainer<PoseContainer>(
-          AdapterConfig::LOCALIZATION);
-  CHECK_NOTNULL(ego_pose_container);
   std::vector<int> obstacle_ids =
       obstacles_container->curr_frame_movable_obstacle_ids();
   obstacle_ids.push_back(FLAGS_ego_vehicle_id);
@@ -358,11 +348,9 @@ void EvaluatorManager::BuildObstacleIdHistoryMap() {
   }
 }
 
-void EvaluatorManager::DumpCurrentFrameEnv() {
+void EvaluatorManager::DumpCurrentFrameEnv(
+    ObstaclesContainer* obstacles_container) {
   FrameEnv curr_frame_env;
-  auto obstacles_container =
-      ContainerManager::Instance()->GetContainer<ObstaclesContainer>(
-          AdapterConfig::PERCEPTION_OBSTACLES);
   curr_frame_env.set_timestamp(obstacles_container->timestamp());
   for (const auto obstacle_id_history_pair : obstacle_id_history_map_) {
     int id = obstacle_id_history_pair.first;
@@ -419,6 +407,10 @@ std::unique_ptr<Evaluator> EvaluatorManager::CreateEvaluator(
     }
     case ObstacleConf::JUNCTION_MAP_EVALUATOR: {
       evaluator_ptr.reset(new JunctionMapEvaluator());
+      break;
+    }
+    case ObstacleConf::SEMANTIC_LSTM_EVALUATOR: {
+      evaluator_ptr.reset(new SemanticLSTMEvaluator());
       break;
     }
     default: { break; }

@@ -72,6 +72,7 @@ using apollo::relative_map::MapMsg;
 using apollo::relative_map::NavigationInfo;
 using apollo::routing::RoutingRequest;
 using apollo::routing::RoutingResponse;
+using apollo::storytelling::Stories;
 
 using Json = nlohmann::json;
 using ::google::protobuf::util::MessageToJsonString;
@@ -209,7 +210,7 @@ void UpdateTurnSignal(const apollo::common::VehicleSignal &signal,
 }
 
 void DownsampleCurve(Curve *curve) {
-  if (curve->segment_size() == 0) {
+  if (curve->segment().empty()) {
     return;
   }
 
@@ -275,6 +276,7 @@ void SimulationWorldService::InitReaders() {
   navigation_reader_ =
       node_->CreateReader<NavigationInfo>(FLAGS_navigation_topic);
   relative_map_reader_ = node_->CreateReader<MapMsg>(FLAGS_relative_map_topic);
+  storytelling_reader_ = node_->CreateReader<Stories>(FLAGS_storytelling_topic);
 
   drive_event_reader_ = node_->CreateReader<DriveEvent>(
       FLAGS_drive_event_topic,
@@ -328,7 +330,10 @@ void SimulationWorldService::Update() {
     world_.Clear();
     *world_.mutable_auto_driving_car() = car;
 
-    route_paths_.clear();
+    {
+      boost::unique_lock<boost::shared_mutex> writer_lock(route_paths_mutex_);
+      route_paths_.clear();
+    }
 
     to_clear_ = false;
   }
@@ -348,6 +353,7 @@ void SimulationWorldService::Update() {
   // may not always be perfectly aligned and belong to the same frame.
   obj_map_.clear();
   world_.clear_object();
+  UpdateWithLatestObserved(storytelling_reader_.get());
   UpdateWithLatestObserved(perception_obstacle_reader_.get());
   UpdateWithLatestObserved(perception_traffic_light_reader_.get(), false);
   UpdateWithLatestObserved(prediction_obstacle_reader_.get());
@@ -519,6 +525,22 @@ void SimulationWorldService::UpdateSimulationWorld(const Chassis &chassis) {
   UpdateTurnSignal(chassis.signal(), auto_driving_car);
 
   auto_driving_car->set_disengage_type(DeduceDisengageType(chassis));
+}
+
+template <>
+void SimulationWorldService::UpdateSimulationWorld(const Stories &stories) {
+  world_.clear_stories();
+  auto *world_stories = world_.mutable_stories();
+
+  const google::protobuf::Descriptor *descriptor = stories.GetDescriptor();
+  const google::protobuf::Reflection *reflection = stories.GetReflection();
+  const int field_count = descriptor->field_count();
+  for (int i = 0; i < field_count; ++i) {
+    const google::protobuf::FieldDescriptor *field = descriptor->field(i);
+    if (field->name() != "header") {
+      (*world_stories)[field->name()] = reflection->HasField(stories, field);
+    }
+  }
 }
 
 Object &SimulationWorldService::CreateWorldObjectIfAbsent(
@@ -824,7 +846,7 @@ void SimulationWorldService::UpdateDecision(const DecisionResult &decision_res,
             }
           }
         } else if (decision.has_nudge()) {
-          if (world_obj.polygon_point_size() == 0) {
+          if (world_obj.polygon_point().empty()) {
             if (world_obj.type() == Object_Type_VIRTUAL) {
               AWARN << "No current perception object with id=" << id
                     << " for nudge decision";
@@ -948,10 +970,9 @@ void SimulationWorldService::UpdatePlanningData(const PlanningData &data) {
   }
 
   // Update pull over status
-  planning_data->clear_pull_over_status();
-  if (data.has_pull_over_status()) {
-    planning_data->mutable_pull_over_status()->CopyFrom(
-        data.pull_over_status());
+  planning_data->clear_pull_over();
+  if (data.has_pull_over()) {
+    planning_data->mutable_pull_over()->CopyFrom(data.pull_over());
   }
 
   // Update planning signal
@@ -1050,10 +1071,13 @@ void SimulationWorldService::UpdateSimulationWorld(
 template <>
 void SimulationWorldService::UpdateSimulationWorld(
     const RoutingResponse &routing_response) {
-  if (world_.has_routing_time() &&
-      world_.routing_time() == routing_response.header().timestamp_sec()) {
-    // This routing response has been processed.
-    return;
+  {
+    boost::shared_lock<boost::shared_mutex> reader_lock(route_paths_mutex_);
+    if (world_.has_routing_time() &&
+        world_.routing_time() == routing_response.header().timestamp_sec()) {
+      // This routing response has been processed.
+      return;
+    }
   }
 
   std::vector<Path> paths;
@@ -1062,16 +1086,15 @@ void SimulationWorldService::UpdateSimulationWorld(
   }
 
   world_.clear_route_path();
-  route_paths_.clear();
-  world_.set_routing_time(routing_response.header().timestamp_sec());
 
+  std::vector<RoutePath> route_paths;
   for (const Path &path : paths) {
     // Downsample the path points for frontend display.
     auto sampled_indices =
         DownsampleByAngle(path.path_points(), kAngleThreshold);
 
-    route_paths_.emplace_back();
-    RoutePath *route_path = &route_paths_.back();
+    route_paths.emplace_back();
+    RoutePath *route_path = &route_paths.back();
     for (const size_t index : sampled_indices) {
       const auto &path_point = path.path_points()[index];
       PolygonPoint *route_point = route_path->add_point();
@@ -1085,15 +1108,23 @@ void SimulationWorldService::UpdateSimulationWorld(
       *new_path = *route_path;
     }
   }
+  {
+    boost::unique_lock<boost::shared_mutex> writer_lock(route_paths_mutex_);
+    std::swap(route_paths, route_paths_);
+    world_.set_routing_time(routing_response.header().timestamp_sec());
+  }
 }
 
 Json SimulationWorldService::GetRoutePathAsJson() const {
   Json response;
-  response["routingTime"] = world_.routing_time();
   response["routePath"] = Json::array();
-  // TODO(simulation): there might be a race if there are multiple
-  // RoutingResponse arrived at the same time.
-  for (const auto &route_path : route_paths_) {
+  std::vector<RoutePath> route_paths;
+  {
+    boost::shared_lock<boost::shared_mutex> reader_lock(route_paths_mutex_);
+    response["routingTime"] = world_.routing_time();
+    route_paths = route_paths_;
+  }
+  for (const auto &route_path : route_paths) {
     Json path;
     path["point"] = Json::array();
     for (const auto &route_point : route_path.point()) {

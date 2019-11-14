@@ -40,6 +40,16 @@ Status PathLaneBorrowDecider::Process(
   CHECK_NOTNULL(frame);
   CHECK_NOTNULL(reference_line_info);
 
+  // skip path_lane_borrow_decider if reused path
+  if (FLAGS_enable_skip_path_tasks && PlanningContext::Instance()
+                                          ->mutable_planning_status()
+                                          ->mutable_path_reuse_decider()
+                                          ->reused_path()) {
+    // for debug
+    AINFO << "skip due to reusing path";
+    return Status::OK();
+  }
+
   // By default, don't borrow any lane.
   reference_line_info->set_is_path_lane_borrow(false);
   // Check if lane-borrowing is needed, if so, borrow lane.
@@ -69,40 +79,53 @@ bool PathLaneBorrowDecider::IsNecessaryToBorrowLane(
     // If originally not borrowing neighbor lane:
     ADEBUG << "Blocking obstacle ID["
            << mutable_path_decider_status->front_static_obstacle_id() << "]";
-    if (HasSingleReferenceLine(frame) && IsWithinSidePassingSpeedADC(frame) &&
-        IsBlockingObstacleFarFromIntersection(reference_line_info) &&
-        IsLongTermBlockingObstacle() &&
-        IsBlockingObstacleWithinDestination(reference_line_info) &&
-        IsSidePassableObstacle(reference_line_info)) {
-      // switch to lane-borrowing
-      // set side-pass direction
-      const auto& path_decider_status =
-          PlanningContext::Instance()->planning_status().path_decider();
-      if (path_decider_status.decided_side_pass_direction_size() <= 0) {
-        // first time init decided_side_pass_direction
-        bool left_borrowable;
-        bool right_borrowable;
-        CheckLaneBorrow(reference_line_info, &left_borrowable,
-                        &right_borrowable);
-        if (!left_borrowable && !right_borrowable) {
-          mutable_path_decider_status->set_is_in_path_lane_borrow_scenario(
-              false);
-        } else {
-          mutable_path_decider_status->set_is_in_path_lane_borrow_scenario(
-              true);
-          if (left_borrowable) {
-            mutable_path_decider_status->add_decided_side_pass_direction(
-                PathDeciderStatus::LEFT_BORROW);
-          }
-          if (right_borrowable) {
-            mutable_path_decider_status->add_decided_side_pass_direction(
-                PathDeciderStatus::RIGHT_BORROW);
-          }
+    // ADC requirements check for lane-borrowing:
+    if (!HasSingleReferenceLine(frame)) {
+      return false;
+    }
+    if (!IsWithinSidePassingSpeedADC(frame)) {
+      return false;
+    }
+
+    // Obstacle condition check for lane-borrowing:
+    if (!IsBlockingObstacleFarFromIntersection(reference_line_info)) {
+      return false;
+    }
+    if (!IsLongTermBlockingObstacle()) {
+      return false;
+    }
+    if (!IsBlockingObstacleWithinDestination(reference_line_info)) {
+      return false;
+    }
+    if (!IsSidePassableObstacle(reference_line_info)) {
+      return false;
+    }
+
+    // switch to lane-borrowing
+    // set side-pass direction
+    const auto& path_decider_status =
+        PlanningContext::Instance()->planning_status().path_decider();
+    if (path_decider_status.decided_side_pass_direction().empty()) {
+      // first time init decided_side_pass_direction
+      bool left_borrowable;
+      bool right_borrowable;
+      CheckLaneBorrow(reference_line_info, &left_borrowable, &right_borrowable);
+      if (!left_borrowable && !right_borrowable) {
+        mutable_path_decider_status->set_is_in_path_lane_borrow_scenario(false);
+      } else {
+        mutable_path_decider_status->set_is_in_path_lane_borrow_scenario(true);
+        if (left_borrowable) {
+          mutable_path_decider_status->add_decided_side_pass_direction(
+              PathDeciderStatus::LEFT_BORROW);
+        }
+        if (right_borrowable) {
+          mutable_path_decider_status->add_decided_side_pass_direction(
+              PathDeciderStatus::RIGHT_BORROW);
         }
       }
-
-      AINFO << "Switch from SELF-LANE path to LANE-BORROW path.";
     }
+
+    AINFO << "Switch from SELF-LANE path to LANE-BORROW path.";
   }
   return mutable_path_decider_status->is_in_path_lane_borrow_scenario();
 }
@@ -123,7 +146,7 @@ bool PathLaneBorrowDecider::IsLongTermBlockingObstacle() {
           ->planning_status()
           .path_decider()
           .front_static_obstacle_cycle_counter() >=
-      FLAGS_long_term_blocking_obstacle_cycle_threhold) {
+      FLAGS_long_term_blocking_obstacle_cycle_threshold) {
     ADEBUG << "The blocking obstacle is long-term existing.";
     return true;
   } else {

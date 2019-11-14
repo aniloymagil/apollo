@@ -61,7 +61,14 @@ bool Timer::InitTimerTask() {
   task_->interval_ms = timer_opt_.period;
   task_->next_fire_duration_ms = task_->interval_ms;
   if (timer_opt_.oneshot) {
-    task_->callback = timer_opt_.callback;
+    std::weak_ptr<TimerTask> task_weak_ptr = task_;
+    task_->callback = [callback = this->timer_opt_.callback, task_weak_ptr]() {
+      auto task = task_weak_ptr.lock();
+      if (task) {
+        std::lock_guard<std::mutex> lg(task->mtx_);
+        callback();
+      }
+    };
   } else {
     std::weak_ptr<TimerTask> task_weak_ptr = task_;
     task_->callback = [callback = this->timer_opt_.callback, task_weak_ptr]() {
@@ -69,6 +76,7 @@ bool Timer::InitTimerTask() {
       if (!task) {
         return;
       }
+      std::lock_guard<std::mutex> lg(task->mtx_);
       auto start = Time::MonoTime().ToNanosecond();
       callback();
       auto end = Time::MonoTime().ToNanosecond();
@@ -124,13 +132,15 @@ void Timer::Start() {
   if (!started_.exchange(true)) {
     if (InitTimerTask()) {
       timing_wheel_->AddTask(task_);
+      AINFO << "start timer [" << task_->timer_id_ << "]";
     }
   }
 }
 
 void Timer::Stop() {
-  if (started_.exchange(false)) {
-    ADEBUG << "stop timer ";
+  if (started_.exchange(false) && task_) {
+    AINFO << "stop timer, the timer_id: " << timer_id_;
+    std::lock_guard<std::mutex> lg(task_->mtx_);
     task_.reset();
   }
 }

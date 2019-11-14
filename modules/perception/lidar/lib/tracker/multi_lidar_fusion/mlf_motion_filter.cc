@@ -282,7 +282,7 @@ void MlfMotionFilter::OnlineCovarianceEstimation(
   size_t evaluate_window =
       std::min(track_data->history_objects_.size(),
                static_cast<size_t>(object->boostup_need_history_size));
-  if (evaluate_window <= 0) {
+  if (evaluate_window == 0) {
     // a default large covariance
     object->belief_velocity_online_covariance = Eigen::Matrix3d::Identity() *
                                                 predict_variance_per_sqrsec_ *
@@ -452,13 +452,13 @@ void MlfMotionFilter::BoostupState(const MlfTrackDataConstPtr& track_data,
   }
   // Increase belief when belief less than min boosted velocity
   // Decrease belief when belief greater than max boosted velocity
-  // now boosted_accelaration not used in original version, maybe use later
+  // now boosted_acceleration not used in original version, maybe use later
   if (min_boosted_velocity_norm > new_obj_belief_velocity.norm()) {
-    // Eigen::Vector3d boosted_accelaration =
+    // Eigen::Vector3d boosted_acceleration =
     // (min_boosted_velocity - new_obj_belief_velocity)/new_latest_time_diff_;
     new_obj_belief_velocity = min_boosted_velocity;
   } else if (max_boosted_velocity_norm < new_obj_belief_velocity.norm()) {
-    // Eigen::Vector3d boosted_accelaration =
+    // Eigen::Vector3d boosted_acceleration =
     // (max_boosted_velocity - new_obj_belief_velocity)/new_latest_time_diff_;
     new_obj_belief_velocity = max_boosted_velocity;
   }

@@ -25,40 +25,86 @@ default_task_config: {
   piecewise_jerk_speed_config {
     acc_weight: 1.0
     jerk_weight: 3.0
-    dkappa_penalty_weight: 2000.0
+    kappa_penalty_weight: 2000.0
     ref_s_weight: 10.0
     ref_v_weight: 10.0
   }
 }
 default_task_config: {
+  task_type: PIECEWISE_JERK_NONLINEAR_SPEED_OPTIMIZER
+  piecewise_jerk_nonlinear_speed_config {
+    acc_weight: 100.0
+    jerk_weight: 300.0
+    lat_acc_weight: 1000.0
+    ref_v_weight: 0.0
+    ref_s_weight: 100.0
+    use_warm_start: true
+  }
+}
+default_task_config: {
   task_type: DP_ST_SPEED_OPTIMIZER
-  dp_st_speed_config {
-    matrix_dimension_s: 300
-    matrix_dimension_t: 8
+  speed_heuristic_config {
+    default_speed_config {
+      unit_t: 1.0
+      dense_dimension_s: 21
+      dense_unit_s: 0.25
+      sparse_unit_s: 1.0
+      speed_weight: 0.0
+      accel_weight: 10.0
+      jerk_weight: 10.0
+      obstacle_weight: 1.0
+      reference_weight: 0.0
+      go_down_buffer: 5.0
+      go_up_buffer: 5.0
 
-    speed_weight: 0.0
-    accel_weight: 10.0
-    jerk_weight: 10.0
-    obstacle_weight: 1.0
-    reference_weight: 0.0
-    go_down_buffer: 5.0
-    go_up_buffer: 5.0
+      default_obstacle_cost: 1e4
 
-    default_obstacle_cost: 1e4
+      default_speed_cost: 1.0e3
+      exceed_speed_penalty: 1.0e3
+      low_speed_penalty: 10.0
+      reference_speed_penalty: 10.0
+      keep_clear_low_speed_penalty: 10.0
+      accel_penalty: 1.0
+      decel_penalty: 1.0
 
-    default_speed_cost: 1.0e3
-    exceed_speed_penalty: 1.0e3
-    low_speed_penalty: 10.0
-    reference_speed_penalty: 10.0
-    keep_clear_low_speed_penalty: 10.0
-    accel_penalty: 1.0
-    decel_penalty: 1.0
+      positive_jerk_coeff: 1.0
+      negative_jerk_coeff: 1.0
 
-    positive_jerk_coeff: 1.0
-    negative_jerk_coeff: 1.0
+      max_acceleration: 2.0
+      max_deceleration: -4.0
+      spatial_potential_penalty: 1
+    }
+    lane_change_speed_config {
+      unit_t: 1.0
+      dense_dimension_s: 21
+      dense_unit_s: 0.25
+      sparse_unit_s: 1.0
+      speed_weight: 0.0
+      accel_weight: 10.0
+      jerk_weight: 10.0
+      obstacle_weight: 1.0
+      reference_weight: 0.0
+      go_down_buffer: 5.0
+      go_up_buffer: 5.0
 
-    max_acceleration: 3.0
-    max_deceleration: -4.0
+      default_obstacle_cost: 1e4
+
+      default_speed_cost: 1.0e3
+      exceed_speed_penalty: 1.0e3
+      low_speed_penalty: 10.0
+      reference_speed_penalty: 10.0
+      keep_clear_low_speed_penalty: 10.0
+      accel_penalty: 1.0
+      decel_penalty: 1.0
+
+      positive_jerk_coeff: 1.0
+      negative_jerk_coeff: 1.0
+
+      max_acceleration: 2.0
+      max_deceleration: -4.0
+      spatial_potential_penalty: 1.0e5
+      is_lane_changing: true
+    }
   }
 }
 default_task_config: {
@@ -73,6 +119,12 @@ default_task_config: {
     search_beam_radius_intensity: 0.08
     search_range: 3.14
     is_block_angle_threshold: 0.5
+  }
+}
+default_task_config: {
+  task_type: ST_BOUNDS_DECIDER
+  st_bounds_decider_config {
+    total_time: 7.0
   }
 }
 default_task_config: {
@@ -229,7 +281,7 @@ default_task_config: {
           s_curve_config {
             acc_weight: 1.0
             jerk_weight: 1.0
-            dkappa_penalty_weight: 100.0
+            kappa_penalty_weight: 100.0
             ref_s_weight: 10.0
             ref_v_weight: 0.0
           }
@@ -312,5 +364,17 @@ default_task_config: {
   task_type: LANE_CHANGE_DECIDER
   lane_change_decider_config {
     enable_lane_change_urgency_check: false
+  }
+}
+default_task_config: {
+  task_type: PATH_REUSE_DECIDER
+  path_reuse_decider_config {
+    reuse_path: false
+  }
+}
+default_task_config: {
+  task_type: PATH_DECIDER
+  path_decider_config{
+    static_obstacle_buffer: 0.3
   }
 }

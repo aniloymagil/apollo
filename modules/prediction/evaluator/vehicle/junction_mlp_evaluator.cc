@@ -32,7 +32,7 @@
 #include "modules/prediction/common/prediction_system_gflags.h"
 #include "modules/prediction/common/prediction_util.h"
 #include "modules/prediction/container/container_manager.h"
-#include "modules/prediction/container/pose/pose_container.h"
+#include "modules/prediction/container/obstacles/obstacles_container.h"
 
 namespace apollo {
 namespace prediction {
@@ -62,7 +62,8 @@ JunctionMLPEvaluator::JunctionMLPEvaluator() : device_(torch::kCPU) {
 
 void JunctionMLPEvaluator::Clear() {}
 
-bool JunctionMLPEvaluator::Evaluate(Obstacle* obstacle_ptr) {
+bool JunctionMLPEvaluator::Evaluate(Obstacle* obstacle_ptr,
+                                    ObstaclesContainer* obstacles_container) {
   // Sanity checks.
   omp_set_num_threads(1);
   Clear();
@@ -86,7 +87,7 @@ bool JunctionMLPEvaluator::Evaluate(Obstacle* obstacle_ptr) {
   }
 
   std::vector<double> feature_values;
-  ExtractFeatureValues(obstacle_ptr, &feature_values);
+  ExtractFeatureValues(obstacle_ptr, obstacles_container, &feature_values);
 
   // Insert features to DataForLearning
   if (FLAGS_prediction_offline_mode ==
@@ -103,12 +104,11 @@ bool JunctionMLPEvaluator::Evaluate(Obstacle* obstacle_ptr) {
   for (size_t i = 0; i < feature_values.size(); ++i) {
     torch_input[0][i] = static_cast<float>(feature_values[i]);
   }
-  torch_inputs.push_back(torch_input.to(device_));
+  torch_inputs.push_back(std::move(torch_input.to(device_)));
   std::vector<double> probability;
   if (latest_feature_ptr->junction_feature().junction_exit_size() > 1) {
-    CHECK_NOTNULL(torch_model_ptr_);
     at::Tensor torch_output_tensor =
-        torch_model_ptr_->forward(torch_inputs).toTensor().to(torch::kCPU);
+        torch_model_.forward(torch_inputs).toTensor().to(torch::kCPU);
     auto torch_output = torch_output_tensor.accessor<float, 2>();
     for (int i = 0; i < torch_output.size(1); ++i) {
       probability.push_back(static_cast<double>(torch_output[0][i]));
@@ -127,7 +127,7 @@ bool JunctionMLPEvaluator::Evaluate(Obstacle* obstacle_ptr) {
   LaneGraph* lane_graph_ptr =
       latest_feature_ptr->mutable_lane()->mutable_lane_graph();
   CHECK_NOTNULL(lane_graph_ptr);
-  if (lane_graph_ptr->lane_sequence_size() == 0) {
+  if (lane_graph_ptr->lane_sequence().empty()) {
     AERROR << "Obstacle [" << id << "] has no lane sequences.";
     return false;
   }
@@ -162,7 +162,8 @@ bool JunctionMLPEvaluator::Evaluate(Obstacle* obstacle_ptr) {
 }
 
 void JunctionMLPEvaluator::ExtractFeatureValues(
-    Obstacle* obstacle_ptr, std::vector<double>* feature_values) {
+    Obstacle* obstacle_ptr, ObstaclesContainer* obstacles_container,
+    std::vector<double>* feature_values) {
   CHECK_NOTNULL(obstacle_ptr);
   int id = obstacle_ptr->id();
 
@@ -177,7 +178,8 @@ void JunctionMLPEvaluator::ExtractFeatureValues(
   }
 
   std::vector<double> ego_vehicle_feature_values;
-  SetEgoVehicleFeatureValues(obstacle_ptr, &ego_vehicle_feature_values);
+  SetEgoVehicleFeatureValues(obstacle_ptr, obstacles_container,
+                             &ego_vehicle_feature_values);
   if (ego_vehicle_feature_values.size() != EGO_VEHICLE_FEATURE_SIZE) {
     AERROR << "Obstacle [" << id << "] has fewer than "
            << "expected ego vehicle feature_values"
@@ -250,21 +252,19 @@ void JunctionMLPEvaluator::SetObstacleFeatureValues(
 }
 
 void JunctionMLPEvaluator::SetEgoVehicleFeatureValues(
-    Obstacle* obstacle_ptr, std::vector<double>* const feature_values) {
+    Obstacle* obstacle_ptr, ObstaclesContainer* obstacles_container,
+    std::vector<double>* const feature_values) {
   feature_values->clear();
   *feature_values = std::vector<double>(4, 0.0);
-  auto ego_pose_container_ptr =
-      ContainerManager::Instance()->GetContainer<PoseContainer>(
-          AdapterConfig::LOCALIZATION);
-  if (ego_pose_container_ptr == nullptr) {
+  auto ego_pose_obstacle_ptr =
+      obstacles_container->GetObstacle(FLAGS_ego_vehicle_id);
+  if (ego_pose_obstacle_ptr == nullptr) {
     (*feature_values)[0] = 100.0;
     (*feature_values)[1] = 100.0;
     return;
   }
-  const auto ego_pose_obstacle_ptr =
-      ego_pose_container_ptr->ToPerceptionObstacle();
-  const auto ego_position = ego_pose_obstacle_ptr->position();
-  const auto ego_velocity = ego_pose_obstacle_ptr->velocity();
+  const auto ego_position = ego_pose_obstacle_ptr->latest_feature().position();
+  const auto ego_velocity = ego_pose_obstacle_ptr->latest_feature().velocity();
   CHECK_GT(obstacle_ptr->history_size(), 0);
   const Feature& obstacle_feature = obstacle_ptr->latest_feature();
   apollo::common::math::Vec2d ego_relative_position(
@@ -359,13 +359,12 @@ void JunctionMLPEvaluator::SetJunctionFeatureValues(
 }
 
 void JunctionMLPEvaluator::LoadModel() {
-  // TODO(all) uncomment the following when cuda issue is resolved
-  // if (torch::cuda::is_available()) {
-  //   ADEBUG << "CUDA is available for JunctionMLPEvaluator!";
-  //   device_ = torch::Device(torch::kCUDA);
-  // }
+  if (FLAGS_use_cuda && torch::cuda::is_available()) {
+    ADEBUG << "CUDA is available";
+    device_ = torch::Device(torch::kCUDA);
+  }
   torch::set_num_threads(1);
-  torch_model_ptr_ =
+  torch_model_ =
       torch::jit::load(FLAGS_torch_vehicle_junction_mlp_file, device_);
 }
 

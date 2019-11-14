@@ -130,7 +130,9 @@ void DataParser::ParseRawData(const std::string &msg) {
 
   while (cyber::OK()) {
     type = data_parser_->GetMessage(&msg_ptr);
-    if (type == Parser::MessageType::NONE) break;
+    if (type == Parser::MessageType::NONE) {
+      break;
+    }
     DispatchMessage(type, msg_ptr);
   }
 }

@@ -638,7 +638,9 @@ void DistanceApproachIPOPTRelaxEndSlackInterface::get_optimization_results(
   *dual_l_result = dual_l_result_;
   *dual_n_result = dual_n_result_;
 
-  if (!distance_approach_config_.enable_initial_final_check()) return;
+  if (!distance_approach_config_.enable_initial_final_check()) {
+    return;
+  }
   CHECK_EQ(state_result_.cols(), xWS_.cols());
   CHECK_EQ(state_result_.rows(), xWS_.rows());
   double state_diff_max = 0.0;

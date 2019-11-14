@@ -70,8 +70,8 @@ static int GetGpuId(
     AERROR << "Read config failed: " << config_file;
     return -1;
   }
-  if (trafficlight_param.detector_param_size() == 0) {
-    AERROR << "get gpu id failed. detector_param_size() == 0";
+  if (trafficlight_param.detector_param().empty()) {
+    AERROR << "get gpu id failed. detector_param().empty()";
     return -1;
   }
   if (!trafficlight_param.has_gpu_id()) {
@@ -653,11 +653,8 @@ bool TrafficLightsPerceptionComponent::GetCarPose(const double timestamp,
            << tf2_child_frame_id_;
     return false;
   }
-  if (!pose->Init(timestamp, pose_matrix)) {
-    AERROR << "PreprocessComponent::get_car_pose failed, ts:"
-           << std::to_string(timestamp) << " pose:" << pose_matrix;
-    return false;
-  }
+  pose->timestamp_ = timestamp;
+  pose->pose_ = pose_matrix;
 
   int state = 0;
   bool ret = true;
@@ -670,7 +667,7 @@ bool TrafficLightsPerceptionComponent::GetCarPose(const double timestamp,
       pose->ClearCameraPose(camera_name);
       AERROR << "get pose from tf failed, camera_name: " << camera_name;
     } else {
-      pose->SetCameraPose(camera_name, pose_matrix);
+      pose->c2w_poses_[camera_name] = pose_matrix;
       state += 1;
     }
   }
@@ -869,7 +866,7 @@ double TrafficLightsPerceptionComponent::stopline_distance(
     return -1;
   }
   const apollo::hdmap::Curve& stopline = stoplines_.Get(0);
-  if (stopline.segment_size() == 0) {
+  if (stopline.segment().empty()) {
     AWARN << "compute car to stopline's distance"
           << " failed(stopline has no segment line). "
           << "cam_pose:" << cam_pose
@@ -884,7 +881,7 @@ double TrafficLightsPerceptionComponent::stopline_distance(
     return -1;
   }
 
-  if (stopline.segment(0).line_segment().point_size() == 0) {
+  if (stopline.segment(0).line_segment().point().empty()) {
     AWARN << "compute car to stopline's distance "
           << "failed(stopline has no point). "
           << "cam_pose:" << cam_pose
@@ -953,7 +950,7 @@ bool TrafficLightsPerceptionComponent::TransformDebugMessage(
     camera::CarPose pose;
     if (GetCarPose(frame->timestamp, &pose)) {
       Eigen::Matrix4d cam_pose;
-      pose.GetCameraPose("front_6mm", &cam_pose);
+      cam_pose = pose.c2w_poses_.at("front_6mm");
       light_debug->set_distance_to_stop_line(stopline_distance(cam_pose));
     } else {
       AERROR << "error occurred in calc distance to stop line";
@@ -971,7 +968,7 @@ void TrafficLightsPerceptionComponent::Visualize(
     const camera::CameraFrame& frame,
     const std::vector<base::TrafficLightPtr>& lights) const {
   char str[100];
-  cv::string tl_string;
+  std::string tl_string;
   cv::Scalar tl_color;
 
   if (lights.empty()) {

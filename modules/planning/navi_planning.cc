@@ -28,6 +28,7 @@
 #include "modules/common/vehicle_state/vehicle_state_provider.h"
 #include "modules/map/hdmap/hdmap_util.h"
 #include "modules/planning/common/ego_info.h"
+#include "modules/planning/common/history.h"
 #include "modules/planning/common/planning_context.h"
 #include "modules/planning/common/planning_gflags.h"
 #include "modules/planning/common/trajectory_stitcher.h"
@@ -53,6 +54,7 @@ NaviPlanning::~NaviPlanning() {
   frame_.reset(nullptr);
   planner_.reset(nullptr);
   FrameHistory::Instance()->Clear();
+  History::Instance()->Clear();
   PlanningContext::Instance()->mutable_planning_status()->Clear();
 }
 
@@ -73,6 +75,9 @@ Status NaviPlanning::Init(const PlanningConfig& config) {
       FLAGS_traffic_rule_config_filename, &traffic_rule_configs_))
       << "Failed to load traffic rule config file "
       << FLAGS_traffic_rule_config_filename;
+
+  // clear planning history
+  History::Instance()->Clear();
 
   // clear planning status
   PlanningContext::Instance()->mutable_planning_status()->Clear();
@@ -124,11 +129,11 @@ void NaviPlanning::RunOnce(const LocalView& local_view,
       std::make_unique<ReferenceLineProvider>(hdmap_, local_view_.relative_map);
 
   // localization
-  ADEBUG << "Get localization:"
+  ADEBUG << "Get localization: "
          << local_view_.localization_estimate->DebugString();
 
   // chassis
-  ADEBUG << "Get chassis:" << local_view_.chassis->DebugString();
+  ADEBUG << "Get chassis: " << local_view_.chassis->DebugString();
 
   Status status = VehicleStateProvider::Instance()->Update(
       *local_view_.localization_estimate, *local_view_.chassis);
@@ -250,7 +255,8 @@ void NaviPlanning::RunOnce(const LocalView& local_view,
 
   // Use planning pad message to make driving decisions
   if (FLAGS_enable_planning_pad_msg) {
-    ProcessPadMsg(driving_action_);
+    const auto& pad_msg_driving_action = frame_->GetPadMsgDrivingAction();
+    ProcessPadMsg(pad_msg_driving_action);
   }
 
   for (auto& ref_line_info : *frame_->mutable_reference_line_info()) {
@@ -305,19 +311,11 @@ void NaviPlanning::RunOnce(const LocalView& local_view,
   FrameHistory::Instance()->Add(seq_num, std::move(frame_));
 }
 
-void NaviPlanning::OnPad(const PadMessage& pad) {
-  ADEBUG << "Received Planning Pad Msg:" << pad.DebugString();
-  AERROR_IF(!pad.has_action()) << "pad message check failed!";
-  driving_action_ = pad.action();
-  is_received_pad_msg_ = true;
-}
-
 void NaviPlanning::ProcessPadMsg(DrivingAction drvie_action) {
   if (config_.has_navigation_planning_config()) {
     std::map<std::string, uint32_t> lane_id_to_priority;
     auto& ref_line_info_group = *frame_->mutable_reference_line_info();
-    if (is_received_pad_msg_) {
-      is_received_pad_msg_ = false;
+    if (drvie_action != DrivingAction::NONE) {
       using LaneInfoPair = std::pair<std::string, double>;
       std::string current_lane_id;
       switch (drvie_action) {

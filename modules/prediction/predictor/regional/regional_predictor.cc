@@ -64,7 +64,9 @@ double CrossProduct(const Eigen::Vector2d& vec1, const Eigen::Vector2d& vec2) {
 
 }  // namespace
 
-void RegionalPredictor::Predict(Obstacle* obstacle) {
+void RegionalPredictor::Predict(
+    const ADCTrajectoryContainer* adc_trajectory_container, Obstacle* obstacle,
+    ObstaclesContainer* obstacles_container) {
   Clear();
 
   CHECK_NOTNULL(obstacle);

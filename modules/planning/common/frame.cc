@@ -49,8 +49,10 @@ using apollo::common::math::Polygon2d;
 using apollo::common::time::Clock;
 using apollo::prediction::PredictionObstacles;
 
+DrivingAction Frame::pad_msg_driving_action_ = DrivingAction::NONE;
+
 FrameHistory::FrameHistory()
-    : IndexedQueue<uint32_t, Frame>(FLAGS_max_history_frame_num) {}
+    : IndexedQueue<uint32_t, Frame>(FLAGS_max_frame_history_num) {}
 
 Frame::Frame(uint32_t sequence_num)
     : sequence_num_(sequence_num),
@@ -193,7 +195,6 @@ bool Frame::CreateReferenceLineInfo(
   for (auto &ref_info : reference_line_info_) {
     if (!ref_info.Init(obstacles())) {
       AERROR << "Failed to init reference line";
-      continue;
     } else {
       has_valid_reference_line = true;
     }
@@ -373,6 +374,8 @@ Status Frame::InitFrameData() {
 
   ReadTrafficLights();
 
+  ReadPadMsgDrivingAction();
+
   return Status::OK();
 }
 
@@ -497,6 +500,18 @@ perception::TrafficLight Frame::GetSignal(
   return *result;
 }
 
+void Frame::ReadPadMsgDrivingAction() {
+  if (local_view_.pad_msg) {
+    if (local_view_.pad_msg->has_action()) {
+      pad_msg_driving_action_ = local_view_.pad_msg->action();
+    }
+  }
+}
+
+void Frame::ResetPadMsgDrivingAction() {
+  pad_msg_driving_action_ = DrivingAction::NONE;
+}
+
 const ReferenceLineInfo *Frame::FindDriveReferenceLineInfo() {
   double min_cost = std::numeric_limits<double>::infinity();
   drive_reference_line_info_ = nullptr;
@@ -508,6 +523,28 @@ const ReferenceLineInfo *Frame::FindDriveReferenceLineInfo() {
     }
   }
   return drive_reference_line_info_;
+}
+
+const ReferenceLineInfo *Frame::FindTargetReferenceLineInfo() {
+  const ReferenceLineInfo *target_reference_line_info = nullptr;
+  for (const auto &reference_line_info : reference_line_info_) {
+    if (reference_line_info.IsChangeLanePath()) {
+      return &reference_line_info;
+    }
+    target_reference_line_info = &reference_line_info;
+  }
+  return target_reference_line_info;
+}
+
+const ReferenceLineInfo *Frame::FindFailedReferenceLineInfo() {
+  for (const auto &reference_line_info : reference_line_info_) {
+    // Find the unsuccessful lane-change path
+    if (!reference_line_info.IsDrivable() &&
+        reference_line_info.IsChangeLanePath()) {
+      return &reference_line_info;
+    }
+  }
+  return nullptr;
 }
 
 const ReferenceLineInfo *Frame::DriveReferenceLineInfo() const {

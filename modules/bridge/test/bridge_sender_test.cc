@@ -20,6 +20,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <thread>
+
 #include "cyber/common/log.h"
 #include "cyber/scheduler/scheduler_factory.h"
 #include "modules/bridge/common/bridge_proto_serialized_buf.h"
@@ -48,7 +50,7 @@ bool send(const std::string &remote_ip, uint16_t remote_port, uint32_t count) {
     pb_msg->set_brake_percentage(coefficient * hundred / total);
     pb_msg->set_steering_percentage(coefficient * hundred / total);
     pb_msg->set_steering_torque_nm(coefficient);
-    pb_msg->set_parking_brake(i % 2 ? true : false);
+    pb_msg->set_parking_brake(i % 2);
     pb_msg->set_high_beam_signal(false);
     pb_msg->set_low_beam_signal(true);
     pb_msg->set_left_turn_signal(false);
@@ -92,7 +94,7 @@ bool send(const std::string &remote_ip, uint16_t remote_port, uint32_t count) {
     close(sock_fd);
 
     // 1000Hz
-    usleep(1000);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
   return true;
 }

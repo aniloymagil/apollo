@@ -21,6 +21,7 @@ cc_library(
         "//modules/dreamview/backend/handlers:websocket_handler",
         "//modules/dreamview/backend/hmi",
         "//modules/dreamview/backend/map:map_service",
+        "//modules/dreamview/backend/perception_camera_updater",
         "//modules/dreamview/backend/point_cloud:point_cloud_updater",
         "//modules/dreamview/backend/sim_control",
         "//modules/dreamview/backend/simulation_world:simulation_world_updater",
@@ -28,7 +29,20 @@ cc_library(
         "//modules/map/hdmap:hdmap_util",
         "//modules/map/pnc_map",
         "@civetweb//:civetweb++",
-    ],
+    ] + select({
+        ":teleop": [
+            "//modules/dreamview/backend/teleop",
+        ],
+        "//conditions:default": [
+        ],
+    }),
+)
+
+config_setting(
+    name = "teleop",
+    values = {
+        "define": "WITH_TELEOP=1",
+    },
 )
 
 cpplint()

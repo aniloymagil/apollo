@@ -39,7 +39,6 @@ using apollo::common::Status;
 
 PiecewiseJerkPathOptimizer::PiecewiseJerkPathOptimizer(const TaskConfig& config)
     : PathOptimizer(config) {
-  SetName("PiecewiseJerkPathOptimizer");
   CHECK(config_.has_piecewise_jerk_path_config());
 }
 
@@ -47,6 +46,13 @@ common::Status PiecewiseJerkPathOptimizer::Process(
     const SpeedData& speed_data, const ReferenceLine& reference_line,
     const common::TrajectoryPoint& init_point,
     PathData* const final_path_data) {
+  // skip piecewise_jerk_path_optimizer if reused path
+  if (FLAGS_enable_skip_path_tasks && PlanningContext::Instance()
+                                          ->mutable_planning_status()
+                                          ->mutable_path_reuse_decider()
+                                          ->reused_path()) {
+    return Status::OK();
+  }
   const auto init_frenet_state = reference_line.ToFrenetFrame(init_point);
 
   // Choose lane_change_path_config for lane-change cases
@@ -92,11 +98,10 @@ common::Status PiecewiseJerkPathOptimizer::Process(
     std::array<double, 3> end_state = {0.0, 0.0, 0.0};
 
     if (!FLAGS_enable_force_pull_over_open_space_parking_test) {
-      // pull over scenario.
+      // pull over scenario
+      // set end lateral to be at the desired pull over destination
       const auto& pull_over_status =
           PlanningContext::Instance()->planning_status().pull_over();
-
-      // Set end lateral to be at the desired pull over destination
       if (pull_over_status.has_position() &&
           pull_over_status.position().has_x() &&
           pull_over_status.position().has_y() &&
@@ -109,9 +114,23 @@ common::Status PiecewiseJerkPathOptimizer::Process(
       }
     }
 
-    bool res_opt = OptimizePath(
-        init_frenet_state.second, end_state, path_boundary.delta_s(),
-        path_boundary.boundary(), w, &opt_l, &opt_dl, &opt_ddl, max_iter);
+    const auto& veh_param =
+        common::VehicleConfigHelper::GetConfig().vehicle_param();
+    const double lat_acc_bound =
+        std::tan(veh_param.max_steer_angle() / veh_param.steer_ratio()) /
+        veh_param.wheel_base();
+    std::vector<std::pair<double, double>> ddl_bounds;
+    for (size_t i = 0; i < path_boundary.boundary().size(); ++i) {
+      double s = static_cast<double>(i) * path_boundary.delta_s() +
+                 path_boundary.start_s();
+      double kappa = reference_line.GetNearestReferencePoint(s).kappa();
+      ddl_bounds.emplace_back(-lat_acc_bound - kappa, lat_acc_bound - kappa);
+    }
+
+    bool res_opt =
+        OptimizePath(init_frenet_state.second, end_state,
+                     path_boundary.delta_s(), path_boundary.boundary(),
+                     ddl_bounds, w, &opt_l, &opt_dl, &opt_ddl, max_iter);
 
     if (res_opt) {
       for (size_t i = 0; i < path_boundary.boundary().size(); i += 4) {
@@ -126,7 +145,7 @@ common::Status PiecewiseJerkPathOptimizer::Process(
       // final_path_data might carry info from upper stream
       PathData path_data = *final_path_data;
       path_data.SetReferenceLine(&reference_line);
-      path_data.SetFrenetPath(FrenetFramePath(frenet_frame_path));
+      path_data.SetFrenetPath(std::move(frenet_frame_path));
       path_data.set_path_label(path_boundary.label());
       path_data.set_blocking_obstacle_id(path_boundary.blocking_obstacle_id());
       candidate_path_data.push_back(std::move(path_data));
@@ -144,6 +163,7 @@ bool PiecewiseJerkPathOptimizer::OptimizePath(
     const std::array<double, 3>& init_state,
     const std::array<double, 3>& end_state, const double delta_s,
     const std::vector<std::pair<double, double>>& lat_boundaries,
+    const std::vector<std::pair<double, double>>& ddl_bounds,
     const std::array<double, 5>& w, std::vector<double>* x,
     std::vector<double>* dx, std::vector<double>* ddx, const int max_iter) {
   PiecewiseJerkPathProblem piecewise_jerk_problem(lat_boundaries.size(),
@@ -153,7 +173,12 @@ bool PiecewiseJerkPathOptimizer::OptimizePath(
   piecewise_jerk_problem.set_end_state_ref({1000.0, 0.0, 0.0}, end_state);
   if (end_state[0] != 0) {
     std::vector<double> x_ref(lat_boundaries.size(), end_state[0]);
-    piecewise_jerk_problem.set_x_ref(10.0, x_ref);
+    const auto& pull_over_type = PlanningContext::Instance()->planning_status()
+                                                              .pull_over()
+                                                              .pull_over_type();
+    const double weight_x_ref =
+        pull_over_type == PullOverStatus::EMERGENCY_PULL_OVER ? 200.0 : 10.0;
+    piecewise_jerk_problem.set_x_ref(weight_x_ref, x_ref);
   }
 
   piecewise_jerk_problem.set_weight_x(w[0]);
@@ -168,11 +193,10 @@ bool PiecewiseJerkPathOptimizer::OptimizePath(
   piecewise_jerk_problem.set_x_bounds(lat_boundaries);
   piecewise_jerk_problem.set_dx_bounds(-FLAGS_lateral_derivative_bound_default,
                                        FLAGS_lateral_derivative_bound_default);
-  piecewise_jerk_problem.set_ddx_bounds(-FLAGS_lateral_derivative_bound_default,
-                                        FLAGS_lateral_derivative_bound_default);
+  piecewise_jerk_problem.set_ddx_bounds(ddl_bounds);
   piecewise_jerk_problem.set_dddx_bound(FLAGS_lateral_jerk_bound);
 
-  // Estimate jerk boundary from vehicle_params
+  // Estimate lat_acc and jerk boundary from vehicle_params
   const auto& veh_param =
       common::VehicleConfigHelper::GetConfig().vehicle_param();
   const double axis_distance = veh_param.wheel_base();
@@ -233,7 +257,7 @@ FrenetFramePath PiecewiseJerkPathOptimizer::ToPiecewiseJerkPath(
     accumulated_s += FLAGS_trajectory_space_resolution;
   }
 
-  return FrenetFramePath(frenet_frame_path);
+  return FrenetFramePath(std::move(frenet_frame_path));
 }
 
 double PiecewiseJerkPathOptimizer::EstimateJerkBoundary(

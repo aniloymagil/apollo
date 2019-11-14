@@ -39,6 +39,7 @@
 #include "modules/planning/common/path/path_data.h"
 #include "modules/planning/common/path_boundary.h"
 #include "modules/planning/common/path_decision.h"
+#include "modules/planning/common/planning_gflags.h"
 #include "modules/planning/common/speed/speed_data.h"
 #include "modules/planning/common/st_graph_data.h"
 #include "modules/planning/common/trajectory/discretized_trajectory.h"
@@ -85,9 +86,12 @@ class ReferenceLineInfo {
   double PriorityCost() const { return priority_cost_; }
   void SetPriorityCost(double cost) { priority_cost_ = cost; }
   // For lattice planner'speed planning target
-  void SetStopPoint(const StopPoint& stop_point);
-  void SetCruiseSpeed(double speed);
+  void SetLatticeStopPoint(const StopPoint& stop_point);
+  void SetLatticeCruiseSpeed(double speed);
   const PlanningTarget& planning_target() const { return planning_target_; }
+
+  void SetCruiseSpeed(double speed) { cruise_speed_ = speed; }
+  double GetCruiseSpeed() const;
 
   hdmap::LaneInfoConstPtr LocateLaneInfo(const double s) const;
 
@@ -178,11 +182,8 @@ class ReferenceLineInfo {
 
   void SetCandidatePathData(std::vector<PathData> candidate_path_data);
 
-  std::string GetBlockingObstacleId() const { return blocking_obstacle_id_; }
-
-  void SetBlockingObstacleId(const std::string& blocking_obstacle_id) {
-    blocking_obstacle_id_ = blocking_obstacle_id;
-  }
+  Obstacle* GetBlockingObstacle() const { return blocking_obstacle_; }
+  void SetBlockingObstacle(const std::string& blocking_obstacle_id);
 
   bool is_path_lane_borrow() const { return is_path_lane_borrow_; }
   void set_is_path_lane_borrow(bool is_path_lane_borrow) {
@@ -229,12 +230,16 @@ class ReferenceLineInfo {
 
   std::vector<common::SLPoint> GetAllStopDecisionSLPoint() const;
 
+  void SetTurnSignal(const common::VehicleSignal::TurnSignal& turn_signal);
+  void SetEmergencyLight();
+
  private:
   void InitFirstOverlaps();
 
   bool CheckChangeLane() const;
 
-  void ExportTurnSignal(common::VehicleSignal* signal) const;
+  void SetTurnSignal(common::VehicleSignal* vehicle_signal) const;
+  void ExportVehicleSignal(common::VehicleSignal* vehicle_signal) const;
 
   bool IsIrrelevantObstacle(const Obstacle& obstacle);
 
@@ -268,7 +273,7 @@ class ReferenceLineInfo {
 
   PathDecision path_decision_;
 
-  std::string blocking_obstacle_id_ = "";
+  Obstacle* blocking_obstacle_;
 
   std::vector<PathBoundary> candidate_path_boundaries_;
   std::vector<PathData> candidate_path_data_;
@@ -318,6 +323,10 @@ class ReferenceLineInfo {
    * different st optimizer
    */
   StGraphData st_graph_data_;
+
+  common::VehicleSignal vehicle_signal_;
+
+  double cruise_speed_ = 0.0;
 
   DISALLOW_COPY_AND_ASSIGN(ReferenceLineInfo);
 };

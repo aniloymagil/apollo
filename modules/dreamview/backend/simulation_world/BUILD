@@ -33,6 +33,7 @@ cc_library(
         "//modules/perception/proto:perception_proto",
         "//modules/planning/proto:planning_proto",
         "//modules/prediction/proto:prediction_proto",
+        "//modules/storytelling/proto:story_proto",
         "//third_party/json",
     ],
 )
@@ -62,9 +63,6 @@ cc_library(
         "simulation_world_updater.h",
     ],
     copts = ['-DMODULE_NAME=\\"dreamview\\"'],
-    linkopts = [
-        "-lboost_thread",
-    ],
     deps = [
         ":simulation_world_service",
         "//modules/common/util:map_util",
@@ -72,7 +70,9 @@ cc_library(
         "//modules/dreamview/backend/data_collection_monitor",
         "//modules/dreamview/backend/handlers:websocket_handler",
         "//modules/dreamview/backend/map:map_service",
+        "//modules/dreamview/backend/perception_camera_updater",
         "//modules/dreamview/backend/sim_control",
+        "@boost",
     ],
 )
 

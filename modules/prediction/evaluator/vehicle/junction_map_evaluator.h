@@ -20,10 +20,12 @@
 #include <string>
 #include <vector>
 
+#include "torch/extension.h"
 #include "torch/script.h"
-#include "torch/torch.h"
 
 #include "modules/prediction/evaluator/evaluator.h"
+
+#include "modules/prediction/container/obstacles/obstacles_container.h"
 
 namespace apollo {
 namespace prediction {
@@ -48,8 +50,10 @@ class JunctionMapEvaluator : public Evaluator {
   /**
    * @brief Override Evaluate
    * @param Obstacle pointer
+   * @param Obstacles container
    */
-  bool Evaluate(Obstacle* obstacle_ptr) override;
+  bool Evaluate(Obstacle* obstacle_ptr,
+                ObstaclesContainer* obstacles_container) override;
 
   /**
    * @brief Extract feature vector
@@ -73,7 +77,7 @@ class JunctionMapEvaluator : public Evaluator {
  private:
   // junction exit mask
   static const size_t JUNCTION_FEATURE_SIZE = 12;
-  std::shared_ptr<torch::jit::script::Module> torch_model_ptr_ = nullptr;
+  torch::jit::script::Module torch_model_;
   torch::Device device_;
 };
 

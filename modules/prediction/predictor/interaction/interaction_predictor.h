@@ -43,13 +43,18 @@ class InteractionPredictor : public SequencePredictor {
   /**
    * @brief Make prediction
    * @param Obstacle pointer
+   * @param Obstacles container
    */
-  void Predict(Obstacle* obstacle) override;
+  void Predict(const ADCTrajectoryContainer* adc_trajectory_container,
+               Obstacle* obstacle,
+               ObstaclesContainer* obstacles_container) override;
 
  private:
   void Clear();
 
-  void BuildADCTrajectory(const double time_resolution);
+  void BuildADCTrajectory(
+      const ADCTrajectoryContainer* adc_trajectory_container,
+      const double time_resolution);
 
   bool DrawTrajectory(
       const Obstacle& obstacle, const LaneSequence& lane_sequence,
@@ -57,9 +62,10 @@ class InteractionPredictor : public SequencePredictor {
       const double period,
       std::vector<apollo::common::TrajectoryPoint>* trajectory_points);
 
-  double ComputeTrajectoryCost(const Obstacle& obstacle,
-                               const LaneSequence& lane_sequence,
-                               const double acceleration);
+  double ComputeTrajectoryCost(
+      const Obstacle& obstacle, const LaneSequence& lane_sequence,
+      const double acceleration,
+      const ADCTrajectoryContainer* adc_trajectory_container);
 
   double LongitudinalAccelerationCost(const double acceleration);
 
@@ -71,8 +77,9 @@ class InteractionPredictor : public SequencePredictor {
                                      const double speed,
                                      const double acceleration);
 
-  bool LowerRightOfWayThanEgo(const Obstacle& obstacle,
-                              const LaneSequence& lane_sequence);
+  bool LowerRightOfWayThanEgo(
+      const Obstacle& obstacle, const LaneSequence& lane_sequence,
+      const ADCTrajectoryContainer* adc_trajectory_container);
 
   double ComputeLikelihood(const double cost);
 

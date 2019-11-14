@@ -34,6 +34,7 @@
 #include "modules/prediction/common/prediction_gflags.h"
 #include "modules/prediction/proto/feature.pb.h"
 #include "modules/prediction/proto/prediction_conf.pb.h"
+#include "modules/prediction/proto/prediction_obstacle.pb.h"
 
 /**
  * @namespace apollo::prediction
@@ -94,7 +95,7 @@ class Obstacle {
    */
   double timestamp() const;
 
-  bool ReceivedNewerMessage(const double timestamp) const;
+  bool ReceivedOlderMessage(const double timestamp) const;
 
   /**
    * @brief Get the ith feature from latest to earliest.
@@ -193,13 +194,13 @@ class Obstacle {
    * @brief Check if the obstacle is close to a junction exit.
    * @return If the obstacle is closed to a junction exit.
    */
-  bool IsCloseToJunctionExit();
+  bool IsCloseToJunctionExit() const;
 
   /**
    * @brief Check if the obstacle has junction feature.
    * @return If the obstacle has junction feature.
    */
-  bool HasJunctionFeatureWithExits();
+  bool HasJunctionFeatureWithExits() const;
 
   /**
    * @brief Build junction feature.
@@ -245,11 +246,15 @@ class Obstacle {
    */
   void SetCaution();
 
+  bool IsCaution() const;
+
   void SetEvaluatorType(const ObstacleConf::EvaluatorType& evaluator_type);
 
   void SetPredictorType(const ObstacleConf::PredictorType& predictor_type);
 
   const ObstacleConf& obstacle_conf() { return obstacle_conf_; }
+
+  PredictionObstacle GeneratePredictionObstacle();
 
  private:
   Obstacle() = default;

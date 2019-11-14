@@ -33,7 +33,9 @@ SingleLanePredictor::SingleLanePredictor() {
   predictor_type_ = ObstacleConf::SINGLE_LANE_PREDICTOR;
 }
 
-void SingleLanePredictor::Predict(Obstacle* obstacle) {
+void SingleLanePredictor::Predict(
+    const ADCTrajectoryContainer* adc_trajectory_container, Obstacle* obstacle,
+    ObstaclesContainer* obstacles_container) {
   Clear();
 
   CHECK_NOTNULL(obstacle);
@@ -56,7 +58,7 @@ void SingleLanePredictor::Predict(Obstacle* obstacle) {
 
   for (int i = 0; i < num_lane_sequence; ++i) {
     const LaneSequence& sequence = feature.lane().lane_graph().lane_sequence(i);
-    if (sequence.lane_segment_size() <= 0) {
+    if (sequence.lane_segment().empty()) {
       AERROR << "Empty lane segments.";
       continue;
     }

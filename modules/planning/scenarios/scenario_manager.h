@@ -54,6 +54,10 @@ class ScenarioManager final {
 
   ScenarioConfig::ScenarioType SelectPullOverScenario(const Frame& frame);
 
+  ScenarioConfig::ScenarioType SelectPadMsgScenario(const Frame& frame);
+
+  ScenarioConfig::ScenarioType SelectInterceptionScenario(const Frame& frame);
+
   ScenarioConfig::ScenarioType SelectStopSignScenario(
       const Frame& frame, const hdmap::PathOverlap& stop_sign_overlap);
 
@@ -75,11 +79,15 @@ class ScenarioManager final {
   bool IsStopSignScenario(const ScenarioConfig::ScenarioType& scenario_type);
   bool IsTrafficLightScenario(
       const ScenarioConfig::ScenarioType& scenario_type);
+  bool IsYieldSignScenario(const ScenarioConfig::ScenarioType& scenario_type);
 
   void UpdatePlanningContext(const Frame& frame,
                              const ScenarioConfig::ScenarioType& scenario_type);
 
   void UpdatePlanningContextBareIntersectionScenario(
+      const Frame& frame, const ScenarioConfig::ScenarioType& scenario_type);
+
+  void UpdatePlanningContextPullOverScenario(
       const Frame& frame, const ScenarioConfig::ScenarioType& scenario_type);
 
   void UpdatePlanningContextStopSignScenario(
@@ -88,7 +96,7 @@ class ScenarioManager final {
   void UpdatePlanningContextTrafficLightScenario(
       const Frame& frame, const ScenarioConfig::ScenarioType& scenario_type);
 
-  void UpdatePlanningContextPullOverScenario(
+  void UpdatePlanningContextYieldSignScenario(
       const Frame& frame, const ScenarioConfig::ScenarioType& scenario_type);
 
  private:

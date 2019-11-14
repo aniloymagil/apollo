@@ -111,13 +111,11 @@ bool Obstacle::IsSlow() {
 }
 
 bool Obstacle::IsOnLane() const {
-  if (feature_history_.empty() ||
-      !latest_feature().has_lane() ||
+  if (feature_history_.empty() || !latest_feature().has_lane() ||
       latest_feature().lane().current_lane_feature().empty()) {
     return false;
   }
-  for (const auto& curr_lane :
-       latest_feature().lane().current_lane_feature()) {
+  for (const auto& curr_lane : latest_feature().lane().current_lane_feature()) {
     if (curr_lane.lane_type() != hdmap::Lane::CITY_DRIVING) {
       return false;
     }
@@ -153,7 +151,7 @@ bool Obstacle::Insert(const PerceptionObstacle& perception_obstacle,
     return false;
   }
 
-  if (ReceivedNewerMessage(timestamp)) {
+  if (ReceivedOlderMessage(timestamp)) {
     AERROR << "Obstacle [" << id_ << "] received an older frame ["
            << std::setprecision(20) << timestamp
            << "] than the most recent timestamp [ " << this->timestamp()
@@ -229,8 +227,14 @@ bool Obstacle::IsInJunction(const std::string& junction_id) const {
     AERROR << "Obstacle [" << id_ << "] has no history";
     return false;
   }
+  if (junction_id.empty()) {
+    return false;
+  }
   std::shared_ptr<const JunctionInfo> junction_info_ptr =
       PredictionMap::JunctionById(junction_id);
+  if (junction_info_ptr == nullptr) {
+    return false;
+  }
   const auto& position = latest_feature().position();
   return PredictionMap::IsPointInJunction(position.x(), position.y(),
                                           junction_info_ptr);
@@ -268,7 +272,7 @@ void Obstacle::BuildJunctionFeature() {
   }
 }
 
-bool Obstacle::IsCloseToJunctionExit() {
+bool Obstacle::IsCloseToJunctionExit() const {
   if (!HasJunctionFeatureWithExits()) {
     AERROR << "No junction feature found";
     return false;
@@ -599,10 +603,7 @@ void Obstacle::SetAcceleration(Feature* feature) {
     const Point3D& prev_velocity = feature_history_.front().velocity();
 
     if (curr_ts > prev_ts) {
-      /*
-       * A damp function is to punish acc calculation for low speed
-       * and reward it for high speed
-       */
+      // A damp function is to punish acc calculation for low speed
       double damping_x = Damp(curr_velocity.x(), 0.001);
       double damping_y = Damp(curr_velocity.y(), 0.001);
       double damping_z = Damp(curr_velocity.z(), 0.001);
@@ -615,15 +616,12 @@ void Obstacle::SetAcceleration(Feature* feature) {
       acc_y *= damping_y;
       acc_z *= damping_z;
 
-      acc_x =
-          common::math::Clamp(acc_x * damping_x, FLAGS_vehicle_min_linear_acc,
-                              FLAGS_vehicle_max_linear_acc);
-      acc_y =
-          common::math::Clamp(acc_y * damping_y, FLAGS_vehicle_min_linear_acc,
-                              FLAGS_vehicle_max_linear_acc);
-      acc_z =
-          common::math::Clamp(acc_z * damping_z, FLAGS_vehicle_min_linear_acc,
-                              FLAGS_vehicle_max_linear_acc);
+      acc_x = common::math::Clamp(acc_x, FLAGS_vehicle_min_linear_acc,
+                                  FLAGS_vehicle_max_linear_acc);
+      acc_y = common::math::Clamp(acc_y, FLAGS_vehicle_min_linear_acc,
+                                  FLAGS_vehicle_max_linear_acc);
+      acc_z = common::math::Clamp(acc_z, FLAGS_vehicle_min_linear_acc,
+                                  FLAGS_vehicle_max_linear_acc);
 
       double heading = feature->velocity_heading();
       acc = acc_x * std::cos(heading) + acc_y * std::sin(heading);
@@ -697,7 +695,7 @@ void Obstacle::SetIsNearJunction(const PerceptionObstacle& perception_obstacle,
   feature->set_is_near_junction(is_near_junction);
 }
 
-bool Obstacle::HasJunctionFeatureWithExits() {
+bool Obstacle::HasJunctionFeatureWithExits() const {
   if (history_size() == 0) {
     return false;
   }
@@ -964,7 +962,7 @@ void Obstacle::SetNearbyLanes(Feature* feature) {
     double heading = feature->velocity_heading();
     double angle_diff = 0.0;
     hdmap::MapPathPoint nearest_point;
-    if (!PredictionMap::ProjectionFromLane(nearby_lane, s, &nearest_point)) {
+    if (PredictionMap::ProjectionFromLane(nearby_lane, s, &nearest_point)) {
       angle_diff = common::math::AngleDiff(nearest_point.heading(), heading);
     }
 
@@ -988,7 +986,8 @@ void Obstacle::SetNearbyLanes(Feature* feature) {
   }
 }
 
-bool Obstacle::HasJunctionExitLane(const LaneSequence& lane_sequence,
+bool Obstacle::HasJunctionExitLane(
+    const LaneSequence& lane_sequence,
     const std::unordered_set<std::string>& exit_lane_id_set) {
   const Feature& feature = latest_feature();
   if (!feature.has_junction_feature()) {
@@ -1013,7 +1012,7 @@ void Obstacle::BuildLaneGraph() {
 
   Feature* feature = mutable_latest_feature();
   // No need to BuildLaneGraph for those non-moving obstacles.
-  if (feature->is_still()) {
+  if (feature->is_still() && id_ != FLAGS_ego_vehicle_id) {
     ADEBUG << "Not build lane graph for still obstacle";
     return;
   }
@@ -1044,7 +1043,7 @@ void Obstacle::BuildLaneGraph() {
   for (auto& lane : feature->lane().current_lane_feature()) {
     std::shared_ptr<const LaneInfo> lane_info =
         PredictionMap::LaneById(lane.lane_id());
-    const LaneGraph& lane_graph = ObstacleClusters::GetLaneGraph(
+    LaneGraph lane_graph = ObstacleClusters::GetLaneGraph(
         lane.lane_s(), road_graph_search_distance, true, lane_info);
     if (lane_graph.lane_sequence_size() > 0) {
       ++curr_lane_count;
@@ -1075,7 +1074,7 @@ void Obstacle::BuildLaneGraph() {
   for (auto& lane : feature->lane().nearby_lane_feature()) {
     std::shared_ptr<const LaneInfo> lane_info =
         PredictionMap::LaneById(lane.lane_id());
-    const LaneGraph& lane_graph = ObstacleClusters::GetLaneGraph(
+    LaneGraph lane_graph = ObstacleClusters::GetLaneGraph(
         lane.lane_s(), road_graph_search_distance, false, lane_info);
     if (lane_graph.lane_sequence_size() > 0) {
       ++nearby_lane_count;
@@ -1110,7 +1109,7 @@ void Obstacle::BuildLaneGraph() {
 
 void Obstacle::SetLaneSequenceStopSign(LaneSequence* lane_sequence_ptr) {
   // Set the nearest stop sign along the lane sequence
-  if (lane_sequence_ptr->lane_segment_size() <= 0) {
+  if (lane_sequence_ptr->lane_segment().empty()) {
     return;
   }
   double accumulate_s = 0.0;
@@ -1242,7 +1241,7 @@ void Obstacle::BuildLaneGraphFromLeftToRight() {
     bool vehicle_is_on_lane = (lane_id == center_lane_info->lane().id().id());
     std::shared_ptr<const LaneInfo> curr_lane_info =
         PredictionMap::LaneById(lane_id);
-    const LaneGraph& local_lane_graph =
+    LaneGraph local_lane_graph =
         ObstacleClusters::GetLaneGraphWithoutMemorizing(
             feature->lane().lane_feature().lane_s(), road_graph_search_distance,
             true, curr_lane_info);
@@ -1301,7 +1300,7 @@ void Obstacle::SetLanePoints(const Feature* feature,
   // Go through every lane_sequence.
   for (int i = 0; i < lane_graph->lane_sequence_size(); ++i) {
     LaneSequence* lane_sequence = lane_graph->mutable_lane_sequence(i);
-    if (lane_sequence->lane_segment_size() <= 0) {
+    if (lane_sequence->lane_segment().empty()) {
       continue;
     }
     // TODO(jiacheng): can refactor the following two parts into one to
@@ -1436,17 +1435,14 @@ void Obstacle::SetLaneSequencePath(LaneGraph* const lane_graph) {
     LaneSequence* lane_sequence = lane_graph->mutable_lane_sequence(i);
     double lane_segment_s = 0.0;
     // Go through every lane_segment.
-    for (int j = 0; j < lane_sequence->lane_segment_size(); ++j) {
-      LaneSegment* lane_segment = lane_sequence->mutable_lane_segment(j);
+    for (const LaneSegment& lane_segment : lane_sequence->lane_segment()) {
       // Go through every lane_point and set the corresponding path_point.
-      for (int k = 0; k < lane_segment->lane_point_size(); ++k) {
-        LanePoint* lane_point = lane_segment->mutable_lane_point(k);
-        PathPoint path_point;
-        path_point.set_s(lane_point->relative_s());
-        path_point.set_theta(lane_point->heading());
-        lane_sequence->add_path_point()->CopyFrom(path_point);
+      for (const LanePoint& lane_point : lane_segment.lane_point()) {
+        PathPoint* path_point = lane_sequence->add_path_point();
+        path_point->set_s(lane_point.relative_s());
+        path_point->set_theta(lane_point.heading());
       }
-      lane_segment_s += lane_segment->total_length();
+      lane_segment_s += lane_segment.total_length();
     }
     // Sanity checks.
     int num_path_point = lane_sequence->path_point_size();
@@ -1626,7 +1622,7 @@ std::unique_ptr<Obstacle> Obstacle::Create(const Feature& feature) {
   return ptr_obstacle;
 }
 
-bool Obstacle::ReceivedNewerMessage(const double timestamp) const {
+bool Obstacle::ReceivedOlderMessage(const double timestamp) const {
   if (feature_history_.empty()) {
     return false;
   }
@@ -1677,6 +1673,14 @@ void Obstacle::SetCaution() {
   feature->mutable_priority()->set_priority(ObstaclePriority::CAUTION);
 }
 
+bool Obstacle::IsCaution() const {
+  if (feature_history_.size() == 0) {
+    return false;
+  }
+  const Feature& feature = latest_feature();
+  return feature.priority().priority() == ObstaclePriority::CAUTION;
+}
+
 void Obstacle::SetEvaluatorType(
     const ObstacleConf::EvaluatorType& evaluator_type) {
   obstacle_conf_.set_evaluator_type(evaluator_type);
@@ -1685,6 +1689,12 @@ void Obstacle::SetEvaluatorType(
 void Obstacle::SetPredictorType(
     const ObstacleConf::PredictorType& predictor_type) {
   obstacle_conf_.set_predictor_type(predictor_type);
+}
+
+PredictionObstacle Obstacle::GeneratePredictionObstacle() {
+  PredictionObstacle prediction_obstacle;
+  // TODO(kechxu) implement
+  return prediction_obstacle;
 }
 
 }  // namespace prediction

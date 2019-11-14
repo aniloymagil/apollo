@@ -44,6 +44,7 @@ DECLARE_int32(road_graph_max_search_horizon);
 
 // Semantic Map
 DECLARE_double(base_image_half_range);
+DECLARE_bool(img_show_semantic_map);
 
 // Scenario
 DECLARE_double(junction_distance_threshold);
@@ -93,6 +94,8 @@ DECLARE_double(still_speed);
 DECLARE_string(evaluator_vehicle_mlp_file);
 DECLARE_string(torch_vehicle_junction_mlp_file);
 DECLARE_string(torch_vehicle_junction_map_file);
+DECLARE_string(torch_vehicle_semantic_lstm_file);
+DECLARE_string(torch_vehicle_semantic_lstm_cpu_file);
 DECLARE_string(torch_vehicle_cruise_go_file);
 DECLARE_string(torch_vehicle_cruise_cutin_file);
 DECLARE_string(torch_vehicle_lane_scanning_file);

@@ -10,11 +10,9 @@ cc_library(
     copts = [
         "-DMODULE_NAME=\\\"planning\\\"",
     ],
-    linkopts = [
-        "-lboost_thread",
-    ],
     deps = [
         "//modules/common/util:map_util",
+        "@boost",
     ],
 )
 
@@ -24,12 +22,10 @@ cc_test(
     srcs = [
         "indexed_list_test.cc",
     ],
-    linkopts = [
-        "-lboost_system",
-    ],
     deps = [
         ":indexed_list",
         "//modules/common/util",
+        "@boost",
         "@gtest//:main",
     ],
 )
@@ -97,13 +93,11 @@ cc_test(
     data = [
         "//modules/planning/common:common_testdata",
     ],
-    linkopts = [
-        "-lboost_system",
-    ],
     deps = [
         ":obstacle",
         "//modules/common/util",
         "//modules/perception/proto:perception_proto",
+        "@boost",
         "@gtest//:main",
     ],
 )
@@ -342,6 +336,38 @@ cc_test(
 )
 
 cc_library(
+    name = "history",
+    srcs = [
+        "history.cc",
+    ],
+    hdrs = [
+        "history.h",
+    ],
+    copts = [
+        "-DMODULE_NAME=\\\"planning\\\"",
+    ],
+    deps = [
+        ":planning_gflags",
+        "//cyber/common",
+        "//modules/planning/proto:decision_proto",
+        "//modules/planning/proto:planning_proto",
+        "@eigen",
+    ],
+)
+
+cc_test(
+    name = "history_test",
+    size = "small",
+    srcs = [
+        "history_test.cc",
+    ],
+    deps = [
+        ":history",
+        "@gtest//:main",
+    ],
+)
+
+cc_library(
     name = "speed_limit",
     srcs = [
         "speed_limit.cc",
@@ -471,11 +497,9 @@ cc_test(
     srcs = [
         "open_space_info_test.cc",
     ],
-    linkopts = [
-        "-lboost_system",
-    ],
     deps = [
         "open_space_info",
+        "@boost",
         "@gtest//:main",
     ],
 )

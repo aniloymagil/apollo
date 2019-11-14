@@ -30,7 +30,6 @@
 #include "modules/prediction/common/prediction_gflags.h"
 #include "modules/prediction/common/prediction_system_gflags.h"
 #include "modules/prediction/container/container_manager.h"
-#include "modules/prediction/container/obstacles/obstacles_container.h"
 
 namespace apollo {
 namespace prediction {
@@ -45,13 +44,15 @@ LaneScanningEvaluator::LaneScanningEvaluator() : device_(torch::kCPU) {
   LoadModel();
 }
 
-bool LaneScanningEvaluator::Evaluate(Obstacle* obstacle_ptr) {
+bool LaneScanningEvaluator::Evaluate(Obstacle* obstacle_ptr,
+                                     ObstaclesContainer* obstacles_container) {
   std::vector<Obstacle*> dummy_dynamic_env;
-  Evaluate(obstacle_ptr, dummy_dynamic_env);
+  Evaluate(obstacle_ptr, obstacles_container, dummy_dynamic_env);
   return true;
 }
 
 bool LaneScanningEvaluator::Evaluate(Obstacle* obstacle_ptr,
+                                     ObstaclesContainer* obstacles_container,
                                      std::vector<Obstacle*> dynamic_env) {
   // Sanity checks.
   omp_set_num_threads(1);
@@ -74,7 +75,7 @@ bool LaneScanningEvaluator::Evaluate(Obstacle* obstacle_ptr,
   LaneGraph* lane_graph_ptr =
       latest_feature_ptr->mutable_lane()->mutable_lane_graph_ordered();
   CHECK_NOTNULL(lane_graph_ptr);
-  if (lane_graph_ptr->lane_sequence_size() == 0) {
+  if (lane_graph_ptr->lane_sequence().empty()) {
     AERROR << "Obstacle [" << id << "] has no lane sequences.";
     return false;
   }
@@ -112,8 +113,7 @@ bool LaneScanningEvaluator::Evaluate(Obstacle* obstacle_ptr,
     torch_input[0][i] = static_cast<float>(feature_values[i]);
   }
   torch_inputs.push_back(std::move(torch_input));
-  ModelInference(torch_inputs, torch_lane_scanning_model_ptr_,
-                 latest_feature_ptr);
+  ModelInference(torch_inputs, torch_lane_scanning_model_, latest_feature_ptr);
   return true;
 }
 
@@ -443,21 +443,19 @@ bool LaneScanningEvaluator::ExtractStaticEnvFeatures(
 }
 
 void LaneScanningEvaluator::LoadModel() {
-  // TODO(all) uncomment the following when cuda issue is resolved
-  // if (torch::cuda::is_available()) {
-  //   ADEBUG << "CUDA is available";
-  //   device_ = torch::Device(torch::kCUDA);
-  // }
+  if (FLAGS_use_cuda && torch::cuda::is_available()) {
+    ADEBUG << "CUDA is available";
+    device_ = torch::Device(torch::kCUDA);
+  }
   torch::set_num_threads(1);
-  torch_lane_scanning_model_ptr_ =
+  torch_lane_scanning_model_ =
       torch::jit::load(FLAGS_torch_vehicle_lane_scanning_file, device_);
 }
 
 void LaneScanningEvaluator::ModelInference(
     const std::vector<torch::jit::IValue>& torch_inputs,
-    std::shared_ptr<torch::jit::script::Module> torch_model_ptr,
-    Feature* feature_ptr) {
-  auto torch_output_tensor = torch_model_ptr->forward(torch_inputs).toTensor();
+    torch::jit::script::Module torch_model, Feature* feature_ptr) {
+  auto torch_output_tensor = torch_model.forward(torch_inputs).toTensor();
   auto torch_output = torch_output_tensor.accessor<float, 3>();
   for (size_t i = 0; i < SHORT_TERM_TRAJECTORY_SIZE; ++i) {
     TrajectoryPoint point;

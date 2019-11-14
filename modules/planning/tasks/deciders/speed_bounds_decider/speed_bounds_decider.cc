@@ -46,7 +46,6 @@ SpeedBoundsDecider::SpeedBoundsDecider(const TaskConfig &config)
     : Decider(config) {
   CHECK(config.has_speed_bounds_decider_config());
   speed_bounds_config_ = config.speed_bounds_decider_config();
-  SetName("SpeedBoundsDecider");
 }
 
 Status SpeedBoundsDecider::Process(
@@ -58,6 +57,7 @@ Status SpeedBoundsDecider::Process(
   PathDecision *const path_decision = reference_line_info->path_decision();
 
   // 1. Map obstacles into st graph
+  auto time1 = std::chrono::system_clock::now();
   STBoundaryMapper boundary_mapper(
       speed_bounds_config_, reference_line, path_data,
       path_data.discretized_path().Length(), speed_bounds_config_.total_time());
@@ -69,6 +69,10 @@ Status SpeedBoundsDecider::Process(
     AERROR << msg;
     return Status(ErrorCode::PLANNING_ERROR, msg);
   }
+  auto time2 = std::chrono::system_clock::now();
+  std::chrono::duration<double> diff = time2 - time1;
+  ADEBUG << "Time for ST Boundary Mapping = " << diff.count() * 1000
+         << " msec.";
 
   std::vector<const STBoundary *> boundaries;
   for (auto *obstacle : path_decision->obstacles().Items()) {
@@ -114,8 +118,8 @@ Status SpeedBoundsDecider::Process(
   STGraphDebug *st_graph_debug = debug->mutable_planning_data()->add_st_graph();
 
   st_graph_data->LoadData(boundaries, min_s_on_st_boundaries, init_point,
-                          speed_limit, path_data_length, total_time_by_conf,
-                          st_graph_debug);
+                          speed_limit, reference_line_info->GetCruiseSpeed(),
+                          path_data_length, total_time_by_conf, st_graph_debug);
 
   // Create and record st_graph debug info
   RecordSTGraphDebug(*st_graph_data, st_graph_debug);
@@ -125,14 +129,10 @@ Status SpeedBoundsDecider::Process(
 
 double SpeedBoundsDecider::SetSpeedFallbackDistance(
     PathDecision *const path_decision) {
-  // Set min_s_on_st_boundaries to guide speed fallback. Different stop distance
-  // is taken when there is an obstacle moving in opposite direction of ADV
+  // Set min_s_on_st_boundaries to guide speed fallback.
   constexpr double kEpsilon = 1.0e-6;
   double min_s_non_reverse = std::numeric_limits<double>::infinity();
   double min_s_reverse = std::numeric_limits<double>::infinity();
-  // TODO(Jinyun): tmp workaround for side pass capability because of doomed
-  // speed planning failure when side pass creeping
-  double side_pass_stop_s = std::numeric_limits<double>::infinity();
 
   for (auto *obstacle : path_decision->obstacles().Items()) {
     const auto &st_boundary = obstacle->path_st_boundary();
@@ -152,21 +152,11 @@ double SpeedBoundsDecider::SetSpeedFallbackDistance(
     } else if (min_s_non_reverse > lowest_s) {
       min_s_non_reverse = lowest_s;
     }
-
-    if (obstacle->LongitudinalDecision().stop().reason_code() ==
-            StopReasonCode::STOP_REASON_SIDEPASS_SAFETY &&
-        side_pass_stop_s > lowest_s) {
-      side_pass_stop_s = lowest_s;
-    }
   }
 
   min_s_reverse = std::max(min_s_reverse, 0.0);
   min_s_non_reverse = std::max(min_s_non_reverse, 0.0);
-  side_pass_stop_s = std::max(side_pass_stop_s, 0.0);
 
-  if (!std::isinf(side_pass_stop_s)) {
-    return side_pass_stop_s;
-  }
   return min_s_non_reverse > min_s_reverse ? 0.0 : min_s_non_reverse;
 }
 

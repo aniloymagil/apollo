@@ -47,10 +47,10 @@ Stage::StageStatus TrafficLightProtectedStageApproach::Process(
 
   bool plan_ok = ExecuteTaskOnReferenceLine(planning_init_point, frame);
   if (!plan_ok) {
-    AERROR << "TrafficLightProtectedStop planning error";
+    AERROR << "TrafficLightProtectedStageApproach planning error";
   }
 
-  if (GetContext()->current_traffic_light_overlap_ids.size() == 0) {
+  if (GetContext()->current_traffic_light_overlap_ids.empty()) {
     return FinishScenario();
   }
 
@@ -100,13 +100,6 @@ Stage::StageStatus TrafficLightProtectedStageApproach::Process(
   }
 
   return Stage::RUNNING;
-}
-
-Stage::StageStatus TrafficLightProtectedStageApproach::FinishScenario() {
-  PlanningContext::Instance()->mutable_planning_status()->clear_traffic_light();
-
-  next_stage_ = ScenarioConfig::NO_STAGE;
-  return Stage::FINISHED;
 }
 
 Stage::StageStatus TrafficLightProtectedStageApproach::FinishStage() {

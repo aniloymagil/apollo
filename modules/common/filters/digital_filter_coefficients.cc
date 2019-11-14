@@ -48,5 +48,35 @@ void LpfCoefficients(const double ts, const double cutoff_freq,
   return;
 }
 
+void LpFirstOrderCoefficients(const double ts, const double settling_time,
+                              const double dead_time,
+                              std::vector<double> *denominators,
+                              std::vector<double> *numerators) {
+  // sanity check
+  if (ts <= 0.0 || settling_time < 0.0 || dead_time < 0.0) {
+    AERROR << "time cannot be negative";
+    return;
+  }
+
+  const size_t k_d = static_cast<int>(dead_time / ts);
+  double a_term;
+
+  denominators->clear();
+  numerators->clear();
+  denominators->reserve(2);
+  numerators->reserve(k_d);  // size depends on dead-time
+
+  if (settling_time == 0.0) {
+    a_term = 0.0;
+  } else {
+    a_term = exp(-1 * ts / settling_time);
+  }
+
+  denominators->push_back(1.0);
+  denominators->push_back(-a_term);
+  numerators->insert(numerators->end(), k_d - 1, 0.0);
+  numerators->push_back(1 - a_term);
+}
+
 }  // namespace common
 }  // namespace apollo

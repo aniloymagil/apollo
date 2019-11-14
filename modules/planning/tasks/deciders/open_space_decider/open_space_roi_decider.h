@@ -64,10 +64,10 @@ class OpenSpaceRoiDecider : public Decider {
                        std::array<common::math::Vec2d, 4> *vertices,
                        hdmap::Path *nearby_path);
 
-  // @brief Set an origin to normlalize the problem for later computation
+  // @brief Set an origin to normalize the problem for later computation
   void SetOrigin(Frame *const frame,
                  const std::array<common::math::Vec2d, 4> &vertices);
-  void SetOriginFromADC(Frame *const frame);
+  void SetOriginFromADC(Frame *const frame, const hdmap::Path &nearby_path);
   void SetParkingSpotEndPose(
       Frame *const frame, const std::array<common::math::Vec2d, 4> &vertices);
 
@@ -123,8 +123,8 @@ class OpenSpaceRoiDecider : public Decider {
                                *const roi_parking_boundary);
 
   bool GetParkAndGoBoundary(Frame *const frame, const hdmap::Path &nearby_path,
-                           std::vector<std::vector<common::math::Vec2d>>
-                               *const roi_parking_boundary);
+                            std::vector<std::vector<common::math::Vec2d>>
+                                *const roi_parking_boundary);
 
   // @brief search target parking spot on the path by vehicle location, if
   // no return a nullptr in target_parking_spot
@@ -165,6 +165,23 @@ class OpenSpaceRoiDecider : public Decider {
                       const std::vector<std::vector<common::math::Vec2d>>
                           &obstacles_vertices_vec,
                       Eigen::MatrixXd *A_all, Eigen::MatrixXd *b_all);
+  /**
+   * @brief check if vehicle is parked in a parking lot
+   *
+   * @return true adc parked in a parking lot
+   * @return false adc parked at a pull-over spot
+   */
+  bool IsInParkingLot(const double adc_init_x, const double adc_init_y,
+                      const double adc_init_heading,
+                      std::array<common::math::Vec2d, 4> *parking_lot_vertices);
+  /**
+   * @brief Get the Park Spot From Map object
+   *
+   * @param parking_lot
+   * @param vertices
+   */
+  void GetParkSpotFromMap(hdmap::ParkingSpaceInfoConstPtr parking_lot,
+                          std::array<common::math::Vec2d, 4> *vertices);
 
  private:
   // @brief parking_spot_id from routing

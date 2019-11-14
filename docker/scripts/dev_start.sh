@@ -21,7 +21,7 @@ FAST_BUILD_MODE="no"
 FAST_TEST_MODE="no"
 VERSION=""
 ARCH=$(uname -m)
-VERSION_X86_64="dev-x86_64-20190617_1100"
+VERSION_X86_64="dev-18.04-x86_64-20191111_1530"
 VERSION_AARCH64="dev-aarch64-20170927_1111"
 VERSION_OPT=""
 
@@ -184,15 +184,28 @@ fi
 
 IMG=${DOCKER_REPO}:$VERSION
 
+
 function local_volumes() {
     set +x
     # Apollo root and bazel cache dirs are required.
     volumes="-v $APOLLO_ROOT_DIR:/apollo \
              -v $HOME/.cache:${DOCKER_HOME}/.cache"
+    APOLLO_TELEOP="${APOLLO_ROOT_DIR}/../apollo-teleop"
+    if [ -d ${APOLLO_TELEOP} ]; then
+        volumes="-v ${APOLLO_TELEOP}:/apollo/modules/teleop ${volumes}"
+    fi
     case "$(uname -s)" in
         Linux)
-            volumes="${volumes} -v /dev:/dev \
-                                -v /media:/media \
+
+            case "$(lsb_release -r | cut -f2)" in
+                14.04)
+                    volumes="${volumes} "
+                    ;;
+                *)
+                    volumes="${volumes} -v /dev:/dev "
+                    ;;
+            esac
+            volumes="${volumes} -v /media:/media \
                                 -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
                                 -v /etc/localtime:/etc/localtime:ro \
                                 -v /usr/src:/usr/src \
@@ -204,8 +217,8 @@ function local_volumes() {
             ;;
     esac
     echo "${volumes}"
-    set -x
 }
+
 
 function main(){
 
@@ -223,6 +236,10 @@ function main(){
     APOLLO_DEV="apollo_dev_${USER}"
     docker ps -a --format "{{.Names}}" | grep "$APOLLO_DEV" 1>/dev/null
     if [ $? == 0 ]; then
+        if [[ "$(docker inspect --format='{{.Config.Image}}' $APOLLO_DEV 2> /dev/null)" != "$IMG" ]]; then
+            rm -rf $APOLLO_ROOT_DIR/bazel-*
+            rm -rf $HOME/.cache/bazel/*
+        fi
         docker stop $APOLLO_DEV 1>/dev/null
         docker rm -v -f $APOLLO_DEV 1>/dev/null
     fi
@@ -259,7 +276,7 @@ function main(){
     PADDLE_VOLUME=apollo_paddlepaddle_volume_$USER
     docker stop ${PADDLE_VOLUME} > /dev/null 2>&1
 
-    PADDLE_VOLUME_IMAGE=${DOCKER_REPO}:paddlepaddle_volume-${ARCH}-latest
+    PADDLE_VOLUME_IMAGE=${DOCKER_REPO}:paddlepaddle_volume-${ARCH}-2.0.0
     docker pull ${PADDLE_VOLUME_IMAGE}
     docker run -it -d --rm --name ${PADDLE_VOLUME} ${PADDLE_VOLUME_IMAGE}
 
@@ -297,16 +314,42 @@ function main(){
 
     info "Starting docker container \"${APOLLO_DEV}\" ..."
 
-    DOCKER_CMD="nvidia-docker"
-    USE_GPU=1
-    if ! [ -x "$(command -v ${DOCKER_CMD})" ]; then
-        DOCKER_CMD="docker"
+    # Check nvidia-driver and GPU device.
+    USE_GPU=0
+    if [ -z "$(which nvidia-smi)" ]; then
+      warning "No nvidia-driver found! Use CPU."
+    elif [ -z "$(nvidia-smi)" ]; then
+      warning "No GPU device found! Use CPU."
+    else
+      USE_GPU=1
+    fi
+
+    # Try to use GPU in container.
+    DOCKER_RUN="docker run"
+    NVIDIA_DOCKER_DOC="https://github.com/NVIDIA/nvidia-docker/blob/master/README.md"
+    if [ ${USE_GPU} -eq 1 ]; then
+      DOCKER_VERSION=$(docker version --format '{{.Server.Version}}')
+      if ! [ -z "$(which nvidia-docker)" ]; then
+        DOCKER_RUN="nvidia-docker run"
+        warning "nvidia-docker is in deprecation!"
+        warning "Please install latest docker and nvidia-container-toolkit: ${NVIDIA_DOCKER_DOC}"
+      elif ! [ -z "$(which nvidia-container-toolkit)" ]; then
+        if dpkg --compare-versions "${DOCKER_VERSION}" "ge" "19.03"; then
+          DOCKER_RUN="docker run --gpus all"
+        else
+          warning "You must upgrade to docker-ce 19.03+ to access GPU from container!"
+          USE_GPU=0
+        fi
+      else
         USE_GPU=0
+        warning "Cannot access GPU from container."
+        warning "Please install latest docker and nvidia-container-toolkit: ${NVIDIA_DOCKER_DOC}"
+      fi
     fi
 
     set -x
 
-    ${DOCKER_CMD} run -it \
+    ${DOCKER_RUN} -it \
         -d \
         --privileged \
         --name $APOLLO_DEV \
@@ -320,6 +363,8 @@ function main(){
         -e DOCKER_GRP_ID=$GRP_ID \
         -e DOCKER_IMG=$IMG \
         -e USE_GPU=$USE_GPU \
+        -e NVIDIA_VISIBLE_DEVICES=all \
+        -e NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
         $(local_volumes) \
         --net host \
         -w /apollo \

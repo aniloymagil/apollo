@@ -56,18 +56,23 @@ class PredictorManager {
 
   /**
    * @brief Execute the predictor generation
+   * @param Adc trajectory container
+   * @param Obstacles container
    */
-  void Run();
+  void Run(const ADCTrajectoryContainer* adc_trajectory_container,
+           ObstaclesContainer* obstacles_container);
 
   /**
    * @brief Predict a single obstacle
-   * @param A pointer to the specific obstacle
-   * @param A pointer to prediction_obstacle
    * @param A pointer to adc_trajectory_container
+   * @param A pointer to the specific obstacle
+   * @param A pointer to the obstacles container
+   * @param A pointer to prediction_obstacle
    */
-  void PredictObstacle(Obstacle* obstacle,
-                       PredictionObstacle* const prediction_obstacle,
-                       ADCTrajectoryContainer* adc_trajectory_container);
+  void PredictObstacle(const ADCTrajectoryContainer* adc_trajectory_container,
+                       Obstacle* obstacle,
+                       ObstaclesContainer* obstacles_container,
+                       PredictionObstacle* const prediction_obstacle);
 
   /**
    * @brief Get prediction obstacles
@@ -95,12 +100,24 @@ class PredictorManager {
    */
   void RegisterPredictors();
 
-  void PredictObstacles(ObstaclesContainer* obstacles_container,
-                        ADCTrajectoryContainer* adc_trajectory_container);
+  void PredictObstacles(const ADCTrajectoryContainer* adc_trajectory_container,
+                        ObstaclesContainer* obstacles_container);
 
   void PredictObstaclesInParallel(
-      ObstaclesContainer* obstacles_container,
-      ADCTrajectoryContainer* adc_trajectory_container);
+      const ADCTrajectoryContainer* adc_trajectory_container,
+      ObstaclesContainer* obstacles_container);
+
+  void InitVehiclePredictors(const ObstacleConf& conf);
+
+  void InitCyclistPredictors(const ObstacleConf& conf);
+
+  void InitDefaultPredictors(const ObstacleConf& conf);
+
+  Predictor* GetVehiclePredictor(const Obstacle& obstacle);
+
+  Predictor* GetCyclistPredictor(const Obstacle& obstacle);
+
+  Predictor* GetDefaultPredictor(const Obstacle& obstacle);
 
  private:
   std::map<ObstacleConf::PredictorType, std::unique_ptr<Predictor>> predictors_;
@@ -128,6 +145,12 @@ class PredictorManager {
 
   ObstacleConf::PredictorType default_off_lane_predictor_ =
       ObstacleConf::FREE_MOVE_PREDICTOR;
+
+  ObstacleConf::PredictorType vehicle_on_lane_caution_predictor_ =
+      ObstacleConf::MOVE_SEQUENCE_PREDICTOR;
+
+  ObstacleConf::PredictorType vehicle_in_junction_caution_predictor_ =
+      ObstacleConf::INTERACTION_PREDICTOR;
 
   PredictionObstacles prediction_obstacles_;
 

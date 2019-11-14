@@ -304,7 +304,7 @@ def validate_record_files(record_files, kword='.record.'):
 
     if len(record_files) == 1 and os.path.isdir(record_files[0]):
         print('Load cyber records from: %s' % record_files[0])
-        for f in os.listdir(record_files[0]):
+        for f in sorted(os.listdir(record_files[0])):
             if kword in f:
                 file_abs_path = os.path.join(record_files[0], f)
                 if validate_record(file_abs_path):
@@ -378,7 +378,7 @@ def main():
     #                     default=[], help="list of channel_name that needs parsing.")
     # parser.add_argument("-s", "--start_timestamp", action="store", type=float,
     #                     default=np.finfo(np.float32).min,
-    #                     help="Specify the begining time to extract data information.")
+    #                     help="Specify the beginning time to extract data information.")
     # parser.add_argument("-e", "--end_timestamp", action="store", type=float,
     #                     default=np.finfo(np.float32).max,
     #                     help="Specify the ending timestamp to extract data information.")

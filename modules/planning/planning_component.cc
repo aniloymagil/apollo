@@ -22,6 +22,7 @@
 #include "modules/common/util/util.h"
 #include "modules/map/hdmap/hdmap_util.h"
 #include "modules/map/pnc_map/pnc_map.h"
+#include "modules/planning/common/history.h"
 #include "modules/planning/common/planning_context.h"
 #include "modules/planning/navi_planning.h"
 #include "modules/planning/on_lane_planning.h"
@@ -64,14 +65,15 @@ bool PlanningComponent::Init() {
         traffic_light_.CopyFrom(*traffic_light);
       });
 
+  pad_msg_reader_ = node_->CreateReader<PadMessage>(
+      FLAGS_planning_pad_topic,
+      [this](const std::shared_ptr<PadMessage>& pad_msg) {
+        ADEBUG << "Received pad data: run pad callback.";
+        std::lock_guard<std::mutex> lock(mutex_);
+        pad_msg_.CopyFrom(*pad_msg);
+      });
+
   if (FLAGS_use_navigation_mode) {
-    pad_message_reader_ = node_->CreateReader<PadMessage>(
-        FLAGS_planning_pad_topic,
-        [this](const std::shared_ptr<PadMessage>& pad_message) {
-          ADEBUG << "Received pad data: run pad callback.";
-          std::lock_guard<std::mutex> lock(mutex_);
-          pad_message_.CopyFrom(*pad_message);
-        });
     relative_map_reader_ = node_->CreateReader<MapMsg>(
         FLAGS_relative_map_topic,
         [this](const std::shared_ptr<MapMsg>& map_message) {
@@ -118,6 +120,10 @@ bool PlanningComponent::Proc(
         std::make_shared<TrafficLightDetection>(traffic_light_);
     local_view_.relative_map = std::make_shared<MapMsg>(relative_map_);
   }
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    local_view_.pad_msg = std::make_shared<PadMessage>(pad_msg_);
+  }
 
   if (!CheckInput()) {
     AERROR << "Input check failed";
@@ -135,6 +141,11 @@ bool PlanningComponent::Proc(
     p.set_relative_time(p.relative_time() + dt);
   }
   planning_writer_->Write(std::make_shared<ADCTrajectory>(adc_trajectory_pb));
+
+  // record in history
+  auto* history = History::Instance();
+  history->Add(adc_trajectory_pb);
+
   return true;
 }
 

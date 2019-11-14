@@ -38,9 +38,7 @@ using ad_rss::world::Object;
 using ad_rss::world::RoadArea;
 using ad_rss::world::Scene;
 
-RssDecider::RssDecider(const TaskConfig &config) : Task(config) {
-  SetName("RssDecider");
-}
+RssDecider::RssDecider(const TaskConfig &config) : Task(config) {}
 
 apollo::common::Status RssDecider::Execute(
     Frame *frame, ReferenceLineInfo *reference_line_info) {
@@ -242,7 +240,7 @@ Status RssDecider::Process(Frame *frame,
     return Status(ErrorCode::PLANNING_ERROR, rss_world_info.err_code);
   }
 
-  if (situationVector.size() == 0) {
+  if (situationVector.empty()) {
     rss_world_info.err_code = "situationVector unexpected empty";
     rss_dump_world_info(rss_world_info);
     return Status(ErrorCode::PLANNING_ERROR, rss_world_info.err_code);
@@ -258,7 +256,7 @@ Status RssDecider::Process(Frame *frame,
     return Status(ErrorCode::PLANNING_ERROR, rss_world_info.err_code);
   }
 
-  if (responseStateVector.size() == 0) {
+  if (responseStateVector.empty()) {
     rss_world_info.err_code = "responseStateVector unexpected empty";
     rss_dump_world_info(rss_world_info);
     return Status(ErrorCode::PLANNING_ERROR, rss_world_info.err_code);

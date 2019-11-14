@@ -36,6 +36,15 @@ class MessageProcess {
 
   static bool Init();
 
+  static bool InitContainers();
+
+  static bool InitEvaluators();
+
+  static bool InitPredictors();
+
+  static void ContainerProcess(
+      const perception::PerceptionObstacles &perception_obstacles);
+
   static void OnPerception(
       const perception::PerceptionObstacles &perception_obstacles,
       PredictionObstacles *const prediction_obstacles);

@@ -69,7 +69,7 @@ class ADCTrajectoryContainer : public Container {
    * @brief Has overlap with ADC trajectory
    * @return True if a target lane sequence has overlap with ADC trajectory
    */
-  bool HasOverlap(const LaneSequence& lane_sequence);
+  bool HasOverlap(const LaneSequence& lane_sequence) const;
 
   /**
    * @brief Set ADC position
@@ -100,7 +100,11 @@ class ADCTrajectoryContainer : public Container {
    */
   bool IsLaneIdInReferenceLine(const std::string& lane_id) const;
 
+  bool IsLaneIdInTargetReferenceLine(const std::string& lane_id) const;
+
   const std::vector<std::string>& GetADCLaneIDSequence() const;
+
+  const std::vector<std::string>& GetADCTargetLaneIDSequence() const;
 
  private:
   void SetJunctionPolygon();
@@ -124,6 +128,8 @@ class ADCTrajectoryContainer : public Container {
 
   void SetLaneSequence();
 
+  void SetTargetLaneSequence();
+
   std::string ToString(const std::unordered_set<std::string>& lane_ids);
 
   std::string ToString(const std::vector<std::string>& lane_ids);
@@ -137,7 +143,8 @@ class ADCTrajectoryContainer : public Container {
   double s_dist_to_junction_;
   std::unordered_set<std::string> adc_lane_ids_;
   std::vector<std::string> adc_lane_seq_;
-  std::mutex adc_trajectory_mutex_;
+  std::unordered_set<std::string> adc_target_lane_ids_;
+  std::vector<std::string> adc_target_lane_seq_;
 };
 
 }  // namespace prediction

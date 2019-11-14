@@ -18,9 +18,6 @@ cc_library(
         "-DENABLE_DEBUG_LIB",
         "-DENABLE_OPENCV",
     ],
-    linkopts = [
-        "-lboost_system",
-    ],
     deps = [
         "//cyber",
         "//modules/common",
@@ -37,8 +34,8 @@ cc_library(
         "//modules/localization/common:localization_common",
         "//modules/localization/msf/common/util:localization_msf_common_util",
         "//modules/localization/msf/local_integ:localization_msf_local_integ",
-        "//modules/localization/msf/local_map/base_map:localization_msf_base_map",
-        "//modules/localization/msf/local_map/lossy_map:localization_msf_lossy_map",
+        "//modules/localization/msf/local_pyramid_map/base_map:localization_pyramid_map_base_map",
+        "//modules/localization/msf/local_pyramid_map/pyramid_map:localization_pyramid_map_pyramid_map",
         "//modules/localization/proto:gnss_pnt_result_proto",
         "//modules/localization/proto:localization_config_proto",
         "//modules/localization/proto:localization_proto",
@@ -46,6 +43,7 @@ cc_library(
         "//modules/localization/proto:measure_proto",
         "//modules/localization/proto:sins_pva_proto",
         "//modules/transform:transform_broadcaster_lib",
+        "@boost",
         "@glog",
         "@gtest",
         "@yaml_cpp//:yaml",

@@ -26,7 +26,8 @@ CostEvaluator::CostEvaluator() {
   evaluator_type_ = ObstacleConf::COST_EVALUATOR;
 }
 
-bool CostEvaluator::Evaluate(Obstacle* obstacle_ptr) {
+bool CostEvaluator::Evaluate(Obstacle* obstacle_ptr,
+                             ObstaclesContainer* obstacles_container) {
   CHECK_NOTNULL(obstacle_ptr);
 
   obstacle_ptr->SetEvaluatorType(evaluator_type_);
@@ -57,7 +58,7 @@ bool CostEvaluator::Evaluate(Obstacle* obstacle_ptr) {
   LaneGraph* lane_graph_ptr =
       latest_feature_ptr->mutable_lane()->mutable_lane_graph();
   CHECK_NOTNULL(lane_graph_ptr);
-  if (lane_graph_ptr->lane_sequence_size() == 0) {
+  if (lane_graph_ptr->lane_sequence().empty()) {
     AERROR << "Obstacle [" << id << "] has no lane sequences.";
     return false;
   }
@@ -83,8 +84,8 @@ double CostEvaluator::ComputeProbability(const double obstacle_length,
 double CostEvaluator::FrontLateralDistanceCost(
     const double obstacle_length, const double obstacle_width,
     const LaneSequence& lane_sequence) {
-  if (lane_sequence.lane_segment_size() == 0 ||
-      lane_sequence.lane_segment(0).lane_point_size() == 0) {
+  if (lane_sequence.lane_segment().empty() ||
+      lane_sequence.lane_segment(0).lane_point().empty()) {
     AWARN << "Empty lane sequence.";
     return 0.0;
   }

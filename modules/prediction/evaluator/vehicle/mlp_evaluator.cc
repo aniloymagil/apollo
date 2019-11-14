@@ -50,7 +50,8 @@ MLPEvaluator::MLPEvaluator() {
 
 void MLPEvaluator::Clear() {}
 
-bool MLPEvaluator::Evaluate(Obstacle* obstacle_ptr) {
+bool MLPEvaluator::Evaluate(Obstacle* obstacle_ptr,
+                            ObstaclesContainer* obstacles_container) {
   Clear();
   CHECK_NOTNULL(obstacle_ptr);
   CHECK_LE(LANE_FEATURE_SIZE, 4 * FLAGS_max_num_lane_point);
@@ -76,7 +77,7 @@ bool MLPEvaluator::Evaluate(Obstacle* obstacle_ptr) {
   LaneGraph* lane_graph_ptr =
       latest_feature_ptr->mutable_lane()->mutable_lane_graph();
   CHECK_NOTNULL(lane_graph_ptr);
-  if (lane_graph_ptr->lane_sequence_size() == 0) {
+  if (lane_graph_ptr->lane_sequence().empty()) {
     AERROR << "Obstacle [" << id << "] has no lane sequences.";
     return false;
   }

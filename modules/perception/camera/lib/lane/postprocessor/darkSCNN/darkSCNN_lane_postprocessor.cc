@@ -224,10 +224,11 @@ bool DarkSCNNLanePostprocessor::Process2D(
   coeffs.resize(lane_type_num_);
   img_coeffs.resize(lane_type_num_);
   for (int i = 1; i < lane_type_num_; ++i) {
+    coeffs[i] << 0, 0, 0, 0;
     if (xy_points[i].size() < minNumPoints_) continue;
     Eigen::Matrix<float, 4, 1> coeff;
     // Solve linear system to estimate polynomial coefficients
-    if (RansacFitting(xy_points[i], &selected_xy_points, &coeff, 200,
+    if (RansacFitting<float>(xy_points[i], &selected_xy_points, &coeff, 200,
                       static_cast<int>(minNumPoints_), 0.1f)) {
       coeffs[i] = coeff;
 
@@ -392,6 +393,8 @@ bool DarkSCNNLanePostprocessor::Process2D(
   // AINFO << "Time for writing: " << microseconds - microseconds_2 << " us";
   time_3 += microseconds - microseconds_2;
   ++time_num;
+
+  ADEBUG << "frame->lane_objects.size(): " << frame->lane_objects.size();
 
   ADEBUG << "Avg sampling time: " << time_1 / time_num
          << " Avg fitting time: " << time_2 / time_num

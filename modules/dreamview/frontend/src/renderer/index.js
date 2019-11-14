@@ -1,6 +1,8 @@
 import * as THREE from "three";
-import OrbitControls from "three/examples/js/controls/OrbitControls.js";
 import Stats from "stats.js";
+
+import Styles from "styles/main.scss";
+const _ = require('lodash');
 
 import Coordinates from "renderer/coordinates";
 import AutoDrivingCar from "renderer/adc";
@@ -17,7 +19,6 @@ import RoutingEditor from "renderer/routing_editor.js";
 import Gnss from "renderer/gnss.js";
 import PointCloud from "renderer/point_cloud.js";
 
-const _ = require('lodash');
 
 class Renderer {
     constructor() {
@@ -26,10 +27,11 @@ class Renderer {
 
         this.coordinates = new Coordinates();
         this.renderer = new THREE.WebGLRenderer({
-            antialias: useAntialias
+            antialias: useAntialias,
+            // Transparent background
+            alpha: true,
         });
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x000C17);
 
         // The dimension of the scene
         this.dimension = {
@@ -94,8 +96,9 @@ class Renderer {
         this.geolocation = { x: 0, y: 0 };
     }
 
-    initialize(canvasId, width, height, options) {
+    initialize(canvasId, width, height, options, cameraData) {
         this.options = options;
+        this.cameraData = cameraData;
         this.canvasId = canvasId;
 
         // Camera
@@ -105,7 +108,7 @@ class Renderer {
             PARAMETERS.camera.laneWidthToViewDistanceRatio);
         this.camera = new THREE.PerspectiveCamera(
             PARAMETERS.camera[this.options.cameraAngle].fov,
-            window.innerWidth / window.innerHeight,
+            width / height,
             PARAMETERS.camera[this.options.cameraAngle].near,
             PARAMETERS.camera[this.options.cameraAngle].far
         );
@@ -152,6 +155,11 @@ class Renderer {
     }
 
     updateDimension(width, height) {
+        if (width < Styles.MIN_MAIN_VIEW_WIDTH / 2 && this.dimension.width >= width) {
+            // Reach minimum, do not update camera/renderer dimension anymore.
+            return;
+        }
+
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(width, height);
@@ -264,7 +272,28 @@ class Renderer {
                 this.enableOrbitControls(true);
             }
             break;
+        case "CameraView": {
+            const { position, rotation } = this.cameraData.get();
+
+            const { x, y, z } = this.coordinates.applyOffset(position);
+            this.camera.position.set(x, y, z);
+
+            // Threejs camera is default facing towards to Z-axis negative direction,
+            // but the actual camera is looking at Z-axis positive direction. So we need
+            // to adjust the camera rotation considering the default camera orientation.
+            this.camera.rotation.set(rotation.x + Math.PI, -rotation.y, -rotation.z);
+
+            this.controls.enabled = false;
+
+            const image = document.getElementById('camera-image');
+            if (image && this.cameraData.imageSrcData) {
+                image.src = this.cameraData.imageSrcData;
+            }
+
+            break;
         }
+        }
+
         this.camera.updateProjectionMatrix();
     }
 
@@ -421,8 +450,8 @@ class Renderer {
         this.ground.updateImage(mapName);
     }
 
-    updateGroundMetadata(serverUrl, mapInfo) {
-        this.ground.initialize(serverUrl, mapInfo);
+    updateGroundMetadata(mapInfo) {
+        this.ground.initialize(mapInfo);
     }
 
     updateMap(newData, removeOldMap = false) {

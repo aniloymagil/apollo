@@ -81,8 +81,12 @@ TEST(NaviSpeedDeciderTest, CreateSpeedData) {
                               &speed_data));
 
   for (auto& p : speed_data) {
-    if (p.s() > 2.0 && p.s() < 24.0) EXPECT_NEAR(2.0, p.a(), 0.1);
-    if (p.s() > 26.0 && p.s() < 60.0) EXPECT_NEAR(10.0, p.v(), 0.1);
+    if (p.s() > 2.0 && p.s() < 24.0) {
+      EXPECT_NEAR(2.0, p.a(), 0.1);
+    }
+    if (p.s() > 26.0 && p.s() < 60.0) {
+      EXPECT_NEAR(10.0, p.v(), 0.1);
+    }
   }
 }
 
@@ -136,7 +140,9 @@ TEST(NaviSpeedDeciderTest, CreateSpeedDataForStaticObstacle) {
                               },
                               &speed_data));
   for (auto& p : speed_data) {
-    if (p.s() > 16.7) EXPECT_NEAR(0.0, p.v(), 1.0);
+    if (p.s() > 16.7) {
+      EXPECT_NEAR(0.0, p.v(), 1.0);
+    }
   }
 }
 
@@ -202,8 +208,12 @@ TEST(NaviSpeedDeciderTest, CreateSpeedDataForObstacles) {
                               },
                               &speed_data));
   for (auto& p : speed_data) {
-    if (p.s() > 15.0 && p.s() < 26.0) EXPECT_NEAR(5.0, p.v(), 0.5);
-    if (p.s() > 37.0) EXPECT_NEAR(0.0, p.v(), 1.0);
+    if (p.s() > 15.0 && p.s() < 26.0) {
+      EXPECT_NEAR(5.0, p.v(), 0.5);
+    }
+    if (p.s() > 37.0) {
+      EXPECT_NEAR(0.0, p.v(), 1.0);
+    }
   }
 }
 
@@ -276,8 +286,12 @@ TEST(NaviSpeedDeciderTest, CreateSpeedDataForCurve) {
                               },
                               &speed_data));
   for (auto& p : speed_data) {
-    if (p.s() > 56.0 && p.s() < 59.0) EXPECT_NEAR(2.6, p.v(), 0.1);
-    if (p.s() > 88.0 && p.s() < 95.0) EXPECT_NEAR(3.7, p.v(), 0.1);
+    if (p.s() > 56.0 && p.s() < 59.0) {
+      EXPECT_NEAR(2.6, p.v(), 0.1);
+    }
+    if (p.s() > 88.0 && p.s() < 95.0) {
+      EXPECT_NEAR(3.7, p.v(), 0.1);
+    }
   }
 }
 

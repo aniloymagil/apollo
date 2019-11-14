@@ -17,6 +17,7 @@ cc_library(
         "//modules/prediction/common:feature_output",
         "//modules/prediction/common:prediction_util",
         "//modules/prediction/common:validation_checker",
+        "//modules/prediction/container/obstacles:obstacles_container",
         "//modules/prediction/evaluator",
         "//modules/prediction/proto:fnn_vehicle_model_proto",
     ],
@@ -34,7 +35,6 @@ cc_test(
     ],
     deps = [
         "//modules/prediction/common:kml_map_based_test",
-        "//modules/prediction/container/obstacles:obstacles_container",
         "//modules/prediction/evaluator/vehicle:mlp_evaluator",
         "@gtest//:main",
     ],
@@ -52,6 +52,7 @@ cc_library(
         "-DMODULE_NAME=\\\"prediction\\\"",
     ],
     deps = [
+        "//modules/prediction/container/obstacles:obstacles_container",
         "//modules/prediction/evaluator",
     ],
 )
@@ -68,7 +69,6 @@ cc_test(
     ],
     deps = [
         "//modules/prediction/common:kml_map_based_test",
-        "//modules/prediction/container/obstacles:obstacles_container",
         "//modules/prediction/evaluator/vehicle:rnn_evaluator",
         "@gtest//:main",
     ],
@@ -87,6 +87,7 @@ cc_library(
     ],
     deps = [
         "//modules/prediction/common:prediction_util",
+        "//modules/prediction/container/obstacles:obstacles_container",
         "//modules/prediction/evaluator",
     ],
 )
@@ -103,7 +104,6 @@ cc_test(
     ],
     deps = [
         "//modules/prediction/common:kml_map_based_test",
-        "//modules/prediction/container/obstacles:obstacles_container",
         "//modules/prediction/evaluator/vehicle:cost_evaluator",
         "@gtest//:main",
     ],
@@ -125,10 +125,11 @@ cc_library(
         "//modules/prediction/common:feature_output",
         "//modules/prediction/common:prediction_util",
         "//modules/prediction/container:container_manager",
+        "//modules/prediction/container/obstacles:obstacles_container",
         "//modules/prediction/evaluator",
     ] + select({
         "//tools/platforms:use_gpu": [
-            "@pytorch",
+            "@pytorch_gpu",
         ],
         "//conditions:default": [
             "@pytorch",
@@ -148,7 +149,6 @@ cc_test(
     ],
     deps = [
         "//modules/prediction/common:kml_map_based_test",
-        "//modules/prediction/container/obstacles:obstacles_container",
         "//modules/prediction/evaluator/vehicle:junction_mlp_evaluator",
         "@gtest//:main",
     ],
@@ -168,10 +168,11 @@ cc_library(
     deps = [
         "//modules/prediction/common:prediction_util",
         "//modules/prediction/common:semantic_map",
+        "//modules/prediction/container/obstacles:obstacles_container",
         "//modules/prediction/evaluator",
     ] + select({
         "//tools/platforms:use_gpu": [
-            "@pytorch",
+            "@pytorch_gpu",
         ],
         "//conditions:default": [
             "@pytorch",
@@ -193,10 +194,11 @@ cc_library(
     deps = [
         "//modules/prediction/common:prediction_util",
         "//modules/prediction/container:container_manager",
+        "//modules/prediction/container/obstacles:obstacles_container",
         "//modules/prediction/evaluator",
     ] + select({
         "//tools/platforms:use_gpu": [
-            "@pytorch",
+            "@pytorch_gpu",
         ],
         "//conditions:default": [
             "@pytorch",
@@ -233,10 +235,11 @@ cc_library(
     ],
     deps = [
         "//modules/prediction/container:container_manager",
+        "//modules/prediction/container/obstacles:obstacles_container",
         "//modules/prediction/evaluator",
     ] + select({
         "//tools/platforms:use_gpu": [
-            "@pytorch",
+            "@pytorch_gpu",
         ],
         "//conditions:default": [
             "@pytorch",
@@ -257,10 +260,38 @@ cc_library(
     ],
     deps = [
         "//modules/prediction/container:container_manager",
+        "//modules/prediction/container/obstacles:obstacles_container",
         "//modules/prediction/evaluator",
     ] + select({
         "//tools/platforms:use_gpu": [
+            "@pytorch_gpu",
+        ],
+        "//conditions:default": [
             "@pytorch",
+        ],
+    }),
+)
+
+cc_library(
+    name = "semantic_lstm_evaluator",
+    srcs = [
+        "semantic_lstm_evaluator.cc",
+    ],
+    hdrs = [
+        "semantic_lstm_evaluator.h",
+    ],
+    copts = [
+        "-DMODULE_NAME=\\\"prediction\\\"",
+    ],
+    deps = [
+        "//modules/prediction/common:prediction_util",
+        "//modules/prediction/common:semantic_map",
+        "//modules/prediction/container/obstacles:obstacles_container",
+        "//modules/prediction/evaluator",
+        "@eigen",
+    ] + select({
+        "//tools/platforms:use_gpu": [
+            "@pytorch_gpu",
         ],
         "//conditions:default": [
             "@pytorch",

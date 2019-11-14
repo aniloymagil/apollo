@@ -285,8 +285,8 @@ void NCut::GetPatchFeature(const MatrixXf &points, MatrixXf *features_in) {
     for (int r = 0; r < patch.rows; ++r) {
       for (int c = 0; c < patch.cols; ++c) {
         float val = patch.at<float>(r, c);
-        features.coeffRef(i, p++) =
-            static_cast<float>((isnan(val) || isinf(val)) ? 1.e-50 : val);
+        features.coeffRef(i, p++) = static_cast<float>(
+            (std::isnan(val) || std::isinf(val)) ? 1.e-50 : val);
         // features.coeffRef(i, p++) = patch.at<float>(r, c);
       }
     }
@@ -737,7 +737,7 @@ void NCut::GetClustersPids(const std::vector<int> &cids,
 int NCut::GetComponentBoundingBox(const std::vector<int> &cluster_ids,
                                   NcutBoundingBox *box_in) {
   NcutBoundingBox &box = *box_in;
-  if (cluster_ids.size() == 0) {
+  if (cluster_ids.empty()) {
     return 0;
   }
   int cid = cluster_ids[0];

@@ -14,6 +14,7 @@ cc_library(
         "-DMODULE_NAME=\\\"prediction\\\"",
     ],
     deps = [
+        "//modules/prediction/container/obstacles:obstacles_container",
         "//modules/prediction/evaluator",
     ],
 )
